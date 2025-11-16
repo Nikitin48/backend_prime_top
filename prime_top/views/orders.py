@@ -103,8 +103,8 @@ def orders_view(request):
 
         for item in items_data:
             try:
-                product_id = item["product_id"]
-                series_id = item["series_id"]
+                product_id = int(item["product_id"])
+                series_id = int(item["series_id"])
                 quantity = int(item.get("quantity", 0))
             except (KeyError, TypeError, ValueError):
                 transaction.set_rollback(True)

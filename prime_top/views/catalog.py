@@ -79,7 +79,13 @@ def series_view(request):
 
     series_query = request.GET.get("series")
     if series_query:
-        qs = qs.filter(series_id__icontains=series_query)
+        try:
+            # Try to filter by series_id if it's a number
+            series_id = int(series_query)
+            qs = qs.filter(series_id=series_id)
+        except ValueError:
+            # Otherwise filter by series_name
+            qs = qs.filter(series_name__icontains=series_query)
 
     color_query = request.GET.get("color")
     if color_query:
@@ -137,7 +143,13 @@ def stocks_view(request):
 
     series_filter = request.GET.get("series")
     if series_filter:
-        stocks_qs = stocks_qs.filter(series__series_id__icontains=series_filter)
+        try:
+            # Try to filter by series_id if it's a number
+            series_id = int(series_filter)
+            stocks_qs = stocks_qs.filter(series__series_id=series_id)
+        except ValueError:
+            # Otherwise filter by series_name
+            stocks_qs = stocks_qs.filter(series__series_name__icontains=series_filter)
 
     analysis_filters = _analysis_range_filters_from_request(request, prefix="series__analyses__")
     if analysis_filters:
@@ -168,7 +180,7 @@ def stocks_view(request):
             {
                 "stocks_id": stock.stocks_id,
                 "series_id": series.series_id if series else None,
-                "series_number": series.series_number if series else None,
+                "series_name": series.series_name if series else None,
                 "production_date": series.series_production_date if series else None,
                 "expire_date": series.series_expire_date if series else None,
                 "quantity": float(stock.stocks_count or 0),
@@ -291,7 +303,7 @@ def analyses_view(request):
 
         payload = {
             "series_id": series_obj.series_id,
-            "series_number": series_obj.series_number,
+            "series_name": series_obj.series_name,
             "production_date": series_obj.series_production_date,
             "expire_date": series_obj.series_expire_date,
             "available_quantity": float(getattr(analysis, "available_quantity", 0.0) or 0.0),

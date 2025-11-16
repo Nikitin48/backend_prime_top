@@ -37,11 +37,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-     'prime_top',
+    'corsheaders',
+    'prime_top',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -129,3 +131,41 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Authentication / authorization settings
 AUTH_TOKEN_TTL_SECONDS = 60 * 60 * 12  # 12 hours
+
+# CORS settings
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:8080",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:8080",
+    # Добавьте другие origins для Flutter/мобильных приложений при необходимости
+]
+
+# Для разработки - разрешить все origins (НЕ использовать в production!)
+CORS_ALLOW_ALL_ORIGINS = True
+
+# Разрешенные методы
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# Разрешенные заголовки
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+# Разрешить отправку cookies (если нужно)
+CORS_ALLOW_CREDENTIALS = True

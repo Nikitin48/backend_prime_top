@@ -146,7 +146,13 @@ def client_orders_detail(request, client_id: int):
 
     series_query = request.GET.get("series")
     if series_query:
-        item_qs = item_qs.filter(series__series_id__icontains=series_query)
+        try:
+            # Try to filter by series_id if it's a number
+            series_id = int(series_query)
+            item_qs = item_qs.filter(series__series_id=series_id)
+        except ValueError:
+            # Otherwise filter by series_name
+            item_qs = item_qs.filter(series__series_name__icontains=series_query)
 
     color = request.GET.get("color")
     if color:

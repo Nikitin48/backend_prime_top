@@ -232,7 +232,7 @@ def _serialize_series(
     product = series.product if include_product else None
     payload = {
         "id": series.series_id,
-        "number": series.series_number,
+        "name": series.series_name,
         "production_date": series.series_production_date,
         "expire_date": series.series_expire_date,
     }

@@ -9,7 +9,7 @@ from django.db import models
 
 
 class Analyses(models.Model):
-    series = models.OneToOneField('Series', models.DO_NOTHING, primary_key=True)
+    series = models.OneToOneField('Series', models.DO_NOTHING, primary_key=True, db_column='series_id')
     analyses_blesk_pri_60_grad = models.FloatField(blank=True, null=True)
     analyses_uslovnaya_vyazkost = models.FloatField(blank=True, null=True)
     analyses_delta_e = models.FloatField(blank=True, null=True)
@@ -117,11 +117,11 @@ class Products(models.Model):
 
 
 class Series(models.Model):
-    series_id = models.CharField(primary_key=True, max_length=20)
+    series_id = models.AutoField(primary_key=True)
     product = models.ForeignKey(Products, models.DO_NOTHING)
-    series_number = models.BigIntegerField()
-    series_production_date = models.DateField()
-    series_expire_date = models.DateField()
+    series_name = models.CharField(max_length=20, blank=True, null=True)
+    series_production_date = models.DateField(blank=True, null=True)
+    series_expire_date = models.DateField(blank=True, null=True)
 
     class Meta:
         managed = False

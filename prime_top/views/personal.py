@@ -163,7 +163,13 @@ def my_stocks_view(request):
 
     series_filter = request.GET.get("series")
     if series_filter:
-        stocks_qs = stocks_qs.filter(series__series_id__icontains=series_filter)
+        try:
+            # Try to filter by series_id if it's a number
+            series_id = int(series_filter)
+            stocks_qs = stocks_qs.filter(series__series_id=series_id)
+        except ValueError:
+            # Otherwise filter by series_name
+            stocks_qs = stocks_qs.filter(series__series_name__icontains=series_filter)
 
     analysis_filters = _analysis_range_filters_from_request(request, prefix="series__analyses__")
     if analysis_filters:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import date
 
 from django.http import JsonResponse
@@ -32,7 +33,7 @@ def login_view(request):
     if not email_raw or not password:
         return JsonResponse({"error": "Fields 'email' and 'password' are required."}, status=400)
 
-    email = str(email_raw).strip()
+    email = str(email_raw).strip().lower()
     user = Users.objects.select_related("client").filter(user_email__iexact=email).first()
     if not user or not _check_user_password(str(password), user.user_password_hash):
         return JsonResponse({"error": "Invalid email or password."}, status=401)
@@ -57,6 +58,12 @@ def login_view(request):
     return JsonResponse(response_payload)
 
 
+def _validate_email(email: str) -> bool:
+    """Basic email validation."""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return bool(re.match(pattern, email))
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def register_view(request):
@@ -67,40 +74,65 @@ def register_view(request):
 
     email_raw = payload.get("email")
     password = payload.get("password")
-    client_id = payload.get("client_id")
     client_block = payload.get("client") or {}
     client_name_raw = payload.get("client_name") or client_block.get("name")
     client_email_raw = payload.get("client_email") or client_block.get("email")
 
+    # Validate required fields
     if not email_raw or not password:
         return JsonResponse({"error": "Fields 'email' and 'password' are required."}, status=400)
-    if not client_id and (not client_name_raw or not client_email_raw):
-        return JsonResponse({"error": "Provide either 'client_id' or both 'client_name' and 'client_email'."}, status=400)
+    
+    if not client_name_raw or not client_email_raw:
+        return JsonResponse(
+            {"error": "Fields 'client_name' and 'client_email' are required for registration."},
+            status=400,
+        )
 
-    email = str(email_raw).strip()
+    email = str(email_raw).strip().lower()
+    client_email = str(client_email_raw).strip().lower()
+    client_name = str(client_name_raw).strip()
 
+    # Validate email format
+    if not _validate_email(email):
+        return JsonResponse({"error": "Invalid user email format."}, status=400)
+    
+    if not _validate_email(client_email):
+        return JsonResponse({"error": "Invalid client email format."}, status=400)
+
+    # Check if user already exists
     if Users.objects.filter(user_email__iexact=email).exists():
         return JsonResponse({"error": "User with this email already exists."}, status=409)
 
-    client = None
-    if client_id:
-        try:
-            client = Clients.objects.get(pk=int(client_id))
-        except (Clients.DoesNotExist, ValueError):
-            return JsonResponse({"error": "Client not found."}, status=404)
+    # Validate password length
+    if len(str(password)) < 6:
+        return JsonResponse({"error": "Password must be at least 6 characters long."}, status=400)
+
+    # Validate client name length
+    if len(client_name) == 0:
+        return JsonResponse({"error": "Client name cannot be empty."}, status=400)
+
+    # Find or create client
+    client_email_clipped = _clip(client_email, length=30)
+    client_name_clipped = _clip(client_name, length=20)
+    
+    existing_client = Clients.objects.filter(client_email__iexact=client_email_clipped).first()
+    if existing_client:
+        # Update client name if it's different
+        if existing_client.client_name != client_name_clipped:
+            existing_client.client_name = client_name_clipped
+            existing_client.save(update_fields=["client_name"])
+        client = existing_client
     else:
-        # Reuse existing client by email if found; otherwise create a new one
-        client_email = _clip(str(client_email_raw).strip(), length=30)
-        client_name = _clip(str(client_name_raw).strip(), length=20)
-        existing = Clients.objects.filter(client_email__iexact=client_email).first()
-        client = existing or Clients.objects.create(
-            client_name=client_name,
-            client_email=client_email,
+        client = Clients.objects.create(
+            client_name=client_name_clipped,
+            client_email=client_email_clipped,
         )
 
+    # Create user
+    email_clipped = _clip(email, length=30)
     user = Users.objects.create(
         client=client,
-        user_email=email,
+        user_email=email_clipped,
         user_password_hash=make_password(str(password)),
         user_is_active=True,
         user_created_at=date.today(),

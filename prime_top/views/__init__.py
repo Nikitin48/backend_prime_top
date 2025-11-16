@@ -1,4 +1,4 @@
-from .auth import login_view
+from .auth import login_view, register_view
 from .catalog import analyses_view, products_view, series_view, stocks_view
 from .clients import (
     client_detail_view,
@@ -14,6 +14,7 @@ from .personal import (
 )
 
 __all__ = [
+    "register_view",
     "login_view",
     "clients_view",
     "client_detail_view",

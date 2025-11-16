@@ -5,6 +5,7 @@ from . import views
 app_name = "prime_top"
 
 urlpatterns = [
+    path("auth/register/", views.register_view, name="register"),
     path("auth/login/", views.login_view, name="login"),
     path("clients/", views.clients_view, name="clients"),
     path("clients/<int:client_id>/", views.client_detail_view, name="client-detail"),

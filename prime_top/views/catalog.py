@@ -426,3 +426,105 @@ def coating_types_view(request):
         "results": results,
     })
 
+
+@require_GET
+def product_detail_view(request, product_id):
+    """
+    Получить детальную информацию о продукте по его ID.
+    
+    Возвращает все поля продукта, все связанные серии и для каждой серии
+    все поля из таблицы analyses.
+    """
+    product = get_object_or_404(
+        Products.objects.select_related("coating_types"),
+        pk=product_id
+    )
+    
+    # Получаем все серии продукта с предзагрузкой analyses
+    series_list = Series.objects.filter(product=product).select_related("analyses")
+    
+    # Сериализуем продукт
+    coating = product.coating_types
+    product_data = {
+        "id": product.product_id,
+        "name": product.product_name,
+        "color_code": product.color,
+        "price": product.product_price,
+        "coating_type": {
+            "id": coating.coating_types_id if coating else None,
+            "name": coating.coating_type_name if coating else None,
+            "nomenclature": coating.coating_type_nomenclatura if coating else None,
+        },
+    }
+    
+    # Сериализуем серии с их analyses
+    series_data = []
+    for series in series_list:
+        series_item = {
+            "id": series.series_id,
+            "name": series.series_name,
+            "production_date": series.series_production_date,
+            "expire_date": series.series_expire_date,
+        }
+        
+        # Добавляем все поля из analyses, если они есть
+        analyses_data = {}
+        analysis = getattr(series, "analyses", None)
+        if analysis:
+            # Получаем все поля из модели Analyses
+            # Числовые поля (FloatField)
+            float_fields = [
+                "analyses_blesk_pri_60_grad",
+                "analyses_uslovnaya_vyazkost",
+                "analyses_delta_e",
+                "analyses_delta_l",
+                "analyses_delta_a",
+                "analyses_color_diff_deltae_d8",
+                "analyses_delta_b",
+                "analyses_vremya_sushki",
+                "analyses_pikovaya_temperatura",
+                "analyses_tolschina_dlya_grunta",
+                "analyses_adgeziya",
+                "analyses_stoikost_k_rastvor",
+                "analyses_kolvo_vykr_s_partii",
+                "analyses_unnamed_16",
+                "analyses_stepen_peretira",
+                "analyses_tverd_vesches_po_v",
+                "analyses_tolsch_plenki_zhidk",
+                "analyses_tolsch_dly_em_lak_ch",
+                "analyses_teoreticheskii_rashod",
+                "analyses_prochnost_pri_izgibe",
+                "analyses_stoikost_k_obrat_udaru",
+                "analyses_prochn_rastyazh_po_er",
+                "analyses_blesk",
+                "analyses_plotnost",
+                "analyses_mass_dolya_nelet_vesh",
+            ]
+            for field in float_fields:
+                value = getattr(analysis, field, None)
+                if value is not None:
+                    analyses_data[field] = value
+            
+            # Строковые поля (CharField)
+            string_fields = [
+                "analyses_viz_kontrol_poverh",
+                "analyses_vneshnii_vid",
+                "analyses_grunt",
+                "analyses_tverdost_po_karandashu",
+            ]
+            for field in string_fields:
+                value = getattr(analysis, field, None)
+                if value is not None:
+                    analyses_data[field] = value
+        
+        series_item["analyses"] = analyses_data if analyses_data else None
+        series_data.append(series_item)
+    
+    response = {
+        "product": product_data,
+        "series": series_data,
+        "series_count": len(series_data),
+    }
+    
+    return JsonResponse(response)
+

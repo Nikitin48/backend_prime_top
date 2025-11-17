@@ -15,6 +15,7 @@ urlpatterns = [
     path("me/orders/history/", views.my_orders_history_view, name="my-orders-history"),
     path("me/stocks/", views.my_stocks_view, name="my-stocks"),
     path("products/", views.products_view, name="products"),
+    path("products/<int:product_id>/", views.product_detail_view, name="product-detail"),
     path("coating-types/", views.coating_types_view, name="coating-types"),
     path("series/", views.series_view, name="series"),
     path("stocks/", views.stocks_view, name="stocks"),

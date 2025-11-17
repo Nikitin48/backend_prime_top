@@ -2,6 +2,7 @@ from .auth import login_view, register_view
 from .catalog import (
     analyses_view,
     coating_types_view,
+    product_detail_view,
     products_view,
     series_view,
     stocks_view,
@@ -27,6 +28,7 @@ __all__ = [
     "client_orders_summary",
     "client_orders_detail",
     "products_view",
+    "product_detail_view",
     "coating_types_view",
     "series_view",
     "stocks_view",

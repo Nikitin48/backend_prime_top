@@ -8,7 +8,7 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 
-from ..models import Analyses, Clients, Products, Series, Stocks
+from ..models import Analyses, Clients, CoatingTypes, Products, Series, Stocks
 from .utils import (
     ANALYSIS_NUMERIC_FIELDS,
     _analysis_range_filters_from_request,
@@ -22,6 +22,13 @@ from .utils import (
 @require_GET
 def products_view(request):
     qs = Products.objects.select_related("coating_types").all()
+
+    coating_type_id = request.GET.get("coating_type_id")
+    if coating_type_id:
+        try:
+            qs = qs.filter(coating_types__coating_types_id=int(coating_type_id))
+        except ValueError:
+            raise Http404("Query parameter 'coating_type_id' must be an integer.")
 
     name_query = request.GET.get("name")
     if name_query:
@@ -63,8 +70,31 @@ def products_view(request):
             raise Http404("Query parameter 'max_price' must be an integer.")
 
     qs = qs.order_by("coating_types__coating_type_nomenclatura", "product_name")
+    
+    total_count = qs.count()
+    
+    offset = request.GET.get("offset")
+    if offset:
+        try:
+            offset_value = int(offset)
+            if offset_value < 0:
+                raise Http404("Query parameter 'offset' must be a non-negative integer.")
+            qs = qs[offset_value:]
+        except ValueError:
+            raise Http404("Query parameter 'offset' must be an integer.")
+    
+    limit = request.GET.get("limit")
+    if limit:
+        try:
+            limit_value = int(limit)
+            if limit_value <= 0:
+                raise Http404("Query parameter 'limit' must be a positive integer.")
+            qs = qs[:limit_value]
+        except ValueError:
+            raise Http404("Query parameter 'limit' must be an integer.")
+    
     products = [_serialize_product(product) for product in qs]
-    return JsonResponse({"count": len(products), "results": products})
+    return JsonResponse({"count": total_count, "results": products})
 
 
 @require_GET
@@ -341,4 +371,58 @@ def analyses_view(request):
         "results": results,
     }
     return JsonResponse(response)
+
+
+@require_GET
+def coating_types_view(request):
+    """
+    Получить список всех категорий типов покрытий (coating types).
+    
+    Возвращает все доступные категории типов покрытий, отсортированные
+    по номенклатуре. В будущем количество категорий может увеличиваться.
+    
+    Query параметры:
+        - sort: порядок сортировки (по умолчанию: nomenclature)
+                 Возможные значения: 'id', 'name', 'nomenclature', '-id', '-name', '-nomenclature'
+    
+    Returns:
+        JSON response с полем 'count' (количество категорий) и 'results' (список категорий)
+    """
+    qs = CoatingTypes.objects.all()
+    
+    # Поддержка сортировки
+    sort = request.GET.get("sort", "nomenclature")
+    valid_sort_fields = {
+        "id", "-id",
+        "name", "-name",
+        "nomenclature", "-nomenclature",
+    }
+    
+    sort_mapping = {
+        "id": "coating_types_id",
+        "-id": "-coating_types_id",
+        "name": "coating_type_name",
+        "-name": "-coating_type_name",
+        "nomenclature": "coating_type_nomenclatura",
+        "-nomenclature": "-coating_type_nomenclatura",
+    }
+    
+    if sort in valid_sort_fields:
+        qs = qs.order_by(sort_mapping[sort])
+    else:
+        qs = qs.order_by("coating_type_nomenclatura")
+    
+    results = [
+        {
+            "id": coating_type.coating_types_id,
+            "name": coating_type.coating_type_name,
+            "nomenclature": coating_type.coating_type_nomenclatura,
+        }
+        for coating_type in qs
+    ]
+    
+    return JsonResponse({
+        "count": len(results),
+        "results": results,
+    })
 

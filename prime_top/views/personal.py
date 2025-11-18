@@ -5,9 +5,10 @@ from typing import Dict, List
 from django.db.models import Count, F, Q, Sum
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 
-from ..models import Orders, Stocks
+from ..models import Orders, OrdersItems, Stocks
 from .utils import (
     ANALYSIS_NUMERIC_FIELDS,
     _analysis_range_filters_from_request,
@@ -124,6 +125,121 @@ def my_orders_history_view(request):
             "orders": orders_payload,
         }
     )
+
+
+@require_client_auth
+@require_GET
+def my_orders_all_view(request):
+    """
+    Возвращает все заказы авторизованного пользователя
+    со всеми связанными данными: order_items, products, series, coating_types.
+    """
+    from django.db.models import Prefetch
+    
+    client = request.authenticated_client
+    
+    # Оптимизируем запросы: предзагружаем связанные данные
+    order_items_prefetch = Prefetch(
+        "ordersitems_set",
+        queryset=OrdersItems.objects.select_related(
+            "product",
+            "product__coating_types",
+            "series",
+            "series__product",
+            "series__product__coating_types",
+        ),
+    )
+    
+    # Получаем все заказы клиента с оптимизацией запросов
+    orders_qs = Orders.objects.filter(client=client).select_related("client").prefetch_related(order_items_prefetch)
+    
+    # Опциональные фильтры
+    statuses: List[str] = []
+    for value in request.GET.getlist("status"):
+        statuses.extend([item.strip() for item in value.split(",") if item.strip()])
+    if statuses:
+        status_filter = Q()
+        for status in statuses:
+            status_filter |= Q(orders_status__iexact=status)
+        orders_qs = orders_qs.filter(status_filter)
+    
+    try:
+        created_from = request.GET.get("created_from")
+        if created_from:
+            orders_qs = orders_qs.filter(orders_created_at__gte=_parse_iso_date(created_from, field="created_from"))
+        
+        created_to = request.GET.get("created_to")
+        if created_to:
+            orders_qs = orders_qs.filter(orders_created_at__lte=_parse_iso_date(created_to, field="created_to"))
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    
+    # Сортируем по дате создания (новые сначала)
+    orders_qs = orders_qs.order_by("-orders_created_at", "-orders_id")
+    
+    # Получаем сводную статистику до применения limit
+    summary = _orders_summary_payload(orders_qs)
+    total_count = orders_qs.count()
+    
+    # Опциональное ограничение количества
+    limit_param = request.GET.get("limit")
+    if limit_param:
+        try:
+            limit_value = int(limit_param)
+            if limit_value > 0:
+                orders_qs = orders_qs[:limit_value]
+        except ValueError:
+            return JsonResponse({"error": "Query parameter 'limit' must be a positive integer."}, status=400)
+    
+    # Сериализуем все заказы со всеми связанными данными
+    orders_payload = [_serialize_order(order, include_items=True) for order in orders_qs]
+    
+    return JsonResponse({
+        "client": _serialize_client(client),
+        "summary": summary,
+        "total_count": total_count,
+        "count": len(orders_payload),
+        "orders": orders_payload,
+    })
+
+
+@require_client_auth
+@require_GET
+def my_order_detail_view(request, order_id: int):
+    """
+    Возвращает конкретный заказ авторизованного пользователя
+    со всеми связанными данными: order_items, products, series, coating_types.
+    """
+    from django.db.models import Prefetch
+    
+    client = request.authenticated_client
+    
+    # Оптимизируем запросы: предзагружаем связанные данные
+    order_items_prefetch = Prefetch(
+        "ordersitems_set",
+        queryset=OrdersItems.objects.select_related(
+            "product",
+            "product__coating_types",
+            "series",
+            "series__product",
+            "series__product__coating_types",
+        ),
+    )
+    
+    # Получаем заказ и проверяем, что он принадлежит авторизованному клиенту
+    order = get_object_or_404(
+        Orders.objects.select_related("client").prefetch_related(order_items_prefetch),
+        pk=order_id,
+        client=client,
+    )
+    
+    # Возвращаем заказ со всеми связанными данными
+    # _serialize_order с include_items=True уже включает:
+    # - order_items (через ordersitems_set)
+    # - products (через item.product)
+    # - series (через item.series)
+    # - coating_types (через series__product__coating_types)
+    return JsonResponse(_serialize_order(order, include_items=True))
 
 
 @require_client_auth

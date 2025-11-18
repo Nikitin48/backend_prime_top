@@ -15,6 +15,8 @@ from .clients import (
 )
 from .orders import order_detail_view, orders_view
 from .personal import (
+    my_order_detail_view,
+    my_orders_all_view,
     my_orders_current_view,
     my_orders_history_view,
     my_stocks_view,
@@ -37,6 +39,8 @@ __all__ = [
     "order_detail_view",
     "my_orders_current_view",
     "my_orders_history_view",
+    "my_orders_all_view",
+    "my_order_detail_view",
     "my_stocks_view",
 ]
 

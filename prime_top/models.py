@@ -55,6 +55,29 @@ class Clients(models.Model):
         db_table = 'clients'
 
 
+class Cart(models.Model):
+    cart_id = models.AutoField(primary_key=True)
+    user = models.OneToOneField('Users', models.DO_NOTHING, db_column='user_id')
+    cart_created_at = models.DateTimeField()
+    cart_updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'cart'
+
+
+class CartItem(models.Model):
+    cart_item_id = models.AutoField(primary_key=True)
+    cart = models.ForeignKey('Cart', models.DO_NOTHING, db_column='cart_id')
+    product = models.ForeignKey('Products', models.DO_NOTHING, db_column='product_id')
+    series = models.ForeignKey('Series', models.DO_NOTHING, db_column='series_id', blank=True, null=True)
+    cart_item_quantity = models.IntegerField()
+
+    class Meta:
+        managed = False
+        db_table = 'cart_item'
+
+
 class CoatingTypes(models.Model):
     coating_types_id = models.AutoField(primary_key=True)
     coating_type_name = models.CharField(max_length=40)
@@ -96,7 +119,7 @@ class OrdersItems(models.Model):
     order_items_id = models.AutoField(primary_key=True)
     orders = models.ForeignKey(Orders, models.DO_NOTHING)
     product = models.ForeignKey('Products', models.DO_NOTHING)
-    series = models.ForeignKey('Series', models.DO_NOTHING)
+    series = models.ForeignKey('Series', models.DO_NOTHING, blank=True, null=True)
     order_items_count = models.IntegerField()
 
     class Meta:

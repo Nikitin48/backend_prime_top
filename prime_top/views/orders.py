@@ -104,12 +104,14 @@ def orders_view(request):
         for item in items_data:
             try:
                 product_id = int(item["product_id"])
-                series_id = int(item["series_id"])
                 quantity = int(item.get("quantity", 0))
+                series_id = item.get("series_id")
+                if series_id is not None:
+                    series_id = int(series_id)
             except (KeyError, TypeError, ValueError):
                 transaction.set_rollback(True)
                 return JsonResponse(
-                    {"error": "Each item must contain 'product_id', 'series_id', and integer 'quantity'."},
+                    {"error": "Each item must contain 'product_id' and integer 'quantity'. 'series_id' is optional."},
                     status=400,
                 )
 
@@ -118,14 +120,15 @@ def orders_view(request):
                 return JsonResponse({"error": "Item 'quantity' must be greater than zero."}, status=400)
 
             product = get_object_or_404(Products, pk=product_id)
-            series = get_object_or_404(Series, pk=series_id)
-
-            if series.product_id != product.product_id:
-                transaction.set_rollback(True)
-                return JsonResponse(
-                    {"error": f"Series '{series.series_id}' does not belong to product '{product.product_id}'."},
-                    status=400,
-                )
+            series = None
+            if series_id is not None:
+                series = get_object_or_404(Series, pk=series_id)
+                if series.product_id != product.product_id:
+                    transaction.set_rollback(True)
+                    return JsonResponse(
+                        {"error": f"Series '{series.series_id}' does not belong to product '{product.product_id}'."},
+                        status=400,
+                    )
 
             OrdersItems.objects.create(
                 orders=order,

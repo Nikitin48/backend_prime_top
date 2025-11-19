@@ -8,7 +8,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.hashers import make_password
 
-from ..models import Clients, Users
+from ..models import Cart, Clients, Users
+from django.utils import timezone
 from .utils import (
     TOKEN_TTL_SECONDS,
     _check_user_password,
@@ -136,6 +137,16 @@ def register_view(request):
         user_password_hash=make_password(str(password)),
         user_is_active=True,
         user_created_at=date.today(),
+    )
+
+    # Create cart for user if it doesn't exist
+    # This ensures every user has their own personal cart
+    Cart.objects.get_or_create(
+        user=user,
+        defaults={
+            "cart_created_at": timezone.now(),
+            "cart_updated_at": timezone.now(),
+        },
     )
 
     token = _issue_token(user.user_id)

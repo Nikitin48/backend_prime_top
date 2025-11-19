@@ -9,6 +9,8 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 
 from ..models import Analyses, Clients, CoatingTypes, Products, Series, Stocks
+from django.db.models import Sum, Q
+from django.db.models.functions import Coalesce
 from .utils import (
     ANALYSIS_NUMERIC_FIELDS,
     _analysis_range_filters_from_request,
@@ -440,8 +442,10 @@ def product_detail_view(request, product_id):
         pk=product_id
     )
     
-    # Получаем все серии продукта с предзагрузкой analyses
-    series_list = Series.objects.filter(product=product).select_related("analyses")
+    # Получаем все серии продукта с предзагрузкой analyses и информацией о stocks
+    series_list = Series.objects.filter(product=product).select_related("analyses").annotate(
+        available_quantity=Coalesce(Sum("stocks__stocks_count"), 0.0)
+    )
     
     # Сериализуем продукт
     coating = product.coating_types
@@ -457,14 +461,17 @@ def product_detail_view(request, product_id):
         },
     }
     
-    # Сериализуем серии с их analyses
+    # Сериализуем серии с их analyses и информацией о stocks
     series_data = []
     for series in series_list:
+        available_qty = float(getattr(series, "available_quantity", 0.0) or 0.0)
         series_item = {
             "id": series.series_id,
             "name": series.series_name,
             "production_date": series.series_production_date,
             "expire_date": series.series_expire_date,
+            "available_quantity": available_qty,
+            "in_stock": available_qty > 0,
         }
         
         # Добавляем все поля из analyses, если они есть

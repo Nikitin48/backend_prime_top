@@ -166,7 +166,7 @@ def client_orders_detail(request, client_id: int):
         items.append(
             {
                 "order_id": order.orders_id,
-                "series_id": item.series.series_id,
+                "series_id": item.series.series_id if item.series else None,
                 "status": order.orders_status,
                 "created_at": order.orders_created_at,
                 "shipped_at": order.orders_shipped_at,

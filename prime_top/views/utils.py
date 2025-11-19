@@ -224,11 +224,13 @@ def _serialize_product(product: Products) -> Dict[str, object]:
 
 
 def _serialize_series(
-    series: Series,
+    series: Optional[Series],
     *,
     include_product: bool = True,
     available_quantity: Optional[float] = None,
-) -> Dict[str, object]:
+) -> Optional[Dict[str, object]]:
+    if series is None:
+        return None
     product = series.product if include_product else None
     payload = {
         "id": series.series_id,
@@ -265,6 +267,7 @@ def _serialize_order(order: Orders, *, include_items: bool = True) -> Dict[str, 
         items = []
         order_items_qs = order.ordersitems_set.select_related(
             "product",
+            "product__coating_types",
             "series",
             "series__product",
             "series__product__coating_types",

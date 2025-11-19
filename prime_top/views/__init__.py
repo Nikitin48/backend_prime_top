@@ -1,4 +1,11 @@
 from .auth import login_view, register_view
+from .cart import (
+    cart_checkout_view,
+    cart_clear_view,
+    cart_item_add_view,
+    cart_item_detail_view,
+    cart_view,
+)
 from .catalog import (
     analyses_view,
     coating_types_view,
@@ -42,5 +49,10 @@ __all__ = [
     "my_orders_all_view",
     "my_order_detail_view",
     "my_stocks_view",
+    "cart_view",
+    "cart_item_add_view",
+    "cart_item_detail_view",
+    "cart_checkout_view",
+    "cart_clear_view",
 ]
 

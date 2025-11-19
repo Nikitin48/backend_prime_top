@@ -22,6 +22,8 @@ urlpatterns = [
     path("series/", views.series_view, name="series"),
     path("stocks/", views.stocks_view, name="stocks"),
     path("analyses/", views.analyses_view, name="analyses"),
+    path("landing/stats/", views.landing_stats_view, name="landing-stats"),
+    path("landing/popular-products/", views.landing_popular_products_view, name="landing-popular-products"),
     path("orders/", views.orders_view, name="orders"),
     path("orders/<int:order_id>/", views.order_detail_view, name="order-detail"),
 ]

@@ -13,6 +13,7 @@ from .clients import (
     client_orders_summary,
     clients_view,
 )
+from .landing import landing_popular_products_view, landing_stats_view
 from .orders import order_detail_view, orders_view
 from .personal import (
     my_order_detail_view,
@@ -35,6 +36,8 @@ __all__ = [
     "series_view",
     "stocks_view",
     "analyses_view",
+    "landing_stats_view",
+    "landing_popular_products_view",
     "orders_view",
     "order_detail_view",
     "my_orders_current_view",

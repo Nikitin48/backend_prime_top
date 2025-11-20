@@ -9,12 +9,13 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods
 
-from ..models import Clients, Orders, OrdersItems
+from ..models import Clients, Orders, OrdersItems, Users
 from .utils import (
     _clip,
     _color_filter,
     _orders_summary_payload,
     _parse_json_body,
+    require_client_auth,
     _serialize_client,
 )
 
@@ -195,4 +196,37 @@ def client_orders_detail(request, client_id: int):
         "orders": items,
     }
     return JsonResponse(data)
+
+
+@require_client_auth
+@require_GET
+def client_users_view(request, client_id: int):
+    client = get_object_or_404(Clients, pk=client_id)
+
+    # Only allow fetching users of own organization
+    if request.authenticated_client.client_id != client.client_id:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+
+    users = Users.objects.filter(client=client).order_by("user_email")
+    payload = [
+        {
+          "id": user.user_id,
+          "email": user.user_email,
+          "first_name": getattr(user, "user_name", None),
+          "last_name": getattr(user, "user_surname", None),
+          "created_at": user.user_created_at,
+        }
+        for user in users
+    ]
+    return JsonResponse(
+        {
+            "client": {
+                "id": client.client_id,
+                "name": client.client_name,
+                "email": client.client_email,
+            },
+            "count": len(payload),
+            "users": payload,
+        }
+    )
 

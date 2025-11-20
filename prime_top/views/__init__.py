@@ -16,6 +16,7 @@ from .clients import (
     client_orders_detail,
     client_orders_summary,
     clients_view,
+    client_users_view,
 )
 from .orders import order_detail_view, orders_view
 from .personal import (
@@ -33,6 +34,7 @@ __all__ = [
     "client_detail_view",
     "client_orders_summary",
     "client_orders_detail",
+    "client_users_view",
     "products_view",
     "product_detail_view",
     "coating_types_view",

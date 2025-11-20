@@ -55,6 +55,8 @@ def _serialize_cart(cart: Cart, include_items: bool = True) -> dict:
         "user": {
             "id": cart.user.user_id,
             "email": cart.user.user_email,
+            "first_name": getattr(cart.user, "user_name", None),
+            "last_name": getattr(cart.user, "user_surname", None),
         },
         "client": _serialize_client(cart.user.client),
         "created_at": cart.cart_created_at.isoformat() if cart.cart_created_at else None,

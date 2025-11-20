@@ -6,15 +6,11 @@ from .cart import (
     cart_item_detail_view,
     cart_view,
 )
-from .catalog import (
-    analyses_view,
-    coating_types_view,
-    product_detail_view,
-    products_view,
-    series_view,
-    stocks_view,
-    top_products_view,
-)
+from .analyses import analyses_view
+from .coating_types import coating_types_view
+from .products import product_detail_view, products_view, top_products_view
+from .series import series_view
+from .stocks import available_stocks_view, stocks_view
 from .clients import (
     client_detail_view,
     client_orders_detail,
@@ -42,6 +38,7 @@ __all__ = [
     "coating_types_view",
     "series_view",
     "stocks_view",
+    "available_stocks_view",
     "analyses_view",
     "top_products_view",
     "orders_view",

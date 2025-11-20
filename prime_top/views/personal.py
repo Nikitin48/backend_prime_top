@@ -182,12 +182,26 @@ def my_orders_all_view(request):
     total_count = orders_qs.count()
     
     # Опциональное ограничение количества
+    # Параметр 'recent' имеет приоритет над 'limit'
+    recent_param = request.GET.get("recent")
     limit_param = request.GET.get("limit")
-    if limit_param:
+    
+    if recent_param:
+        try:
+            recent_value = int(recent_param)
+            if recent_value > 0:
+                orders_qs = orders_qs[:recent_value]
+            else:
+                return JsonResponse({"error": "Query parameter 'recent' must be a positive integer."}, status=400)
+        except ValueError:
+            return JsonResponse({"error": "Query parameter 'recent' must be a positive integer."}, status=400)
+    elif limit_param:
         try:
             limit_value = int(limit_param)
             if limit_value > 0:
                 orders_qs = orders_qs[:limit_value]
+            else:
+                return JsonResponse({"error": "Query parameter 'limit' must be a positive integer."}, status=400)
         except ValueError:
             return JsonResponse({"error": "Query parameter 'limit' must be a positive integer."}, status=400)
     

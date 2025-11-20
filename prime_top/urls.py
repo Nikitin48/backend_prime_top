@@ -11,6 +11,7 @@ urlpatterns = [
     path("clients/<int:client_id>/", views.client_detail_view, name="client-detail"),
     path("clients/<int:client_id>/orders/summary/", views.client_orders_summary, name="client-orders-summary"),
     path("clients/<int:client_id>/orders/", views.client_orders_detail, name="client-orders-detail"),
+    path("clients/<int:client_id>/users/", views.client_users_view, name="client-users"),
     path("me/orders/", views.my_orders_all_view, name="my-orders-all"),
     path("me/orders/current/", views.my_orders_current_view, name="my-orders-current"),
     path("me/orders/history/", views.my_orders_history_view, name="my-orders-history"),

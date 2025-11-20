@@ -13,6 +13,7 @@ from .catalog import (
     products_view,
     series_view,
     stocks_view,
+    top_products_view,
 )
 from .clients import (
     client_detail_view,
@@ -42,6 +43,7 @@ __all__ = [
     "series_view",
     "stocks_view",
     "analyses_view",
+    "top_products_view",
     "orders_view",
     "order_detail_view",
     "my_orders_current_view",

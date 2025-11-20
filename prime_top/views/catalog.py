@@ -8,9 +8,7 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 
-from ..models import Analyses, Clients, CoatingTypes, Products, Series, Stocks
-from django.db.models import Sum, Q
-from django.db.models.functions import Coalesce
+from ..models import Analyses, Clients, CoatingTypes, OrdersItems, Products, Series, Stocks
 from .utils import (
     ANALYSIS_NUMERIC_FIELDS,
     _analysis_range_filters_from_request,
@@ -112,11 +110,9 @@ def series_view(request):
     series_query = request.GET.get("series")
     if series_query:
         try:
-            # Try to filter by series_id if it's a number
             series_id = int(series_query)
             qs = qs.filter(series_id=series_id)
         except ValueError:
-            # Otherwise filter by series_name
             qs = qs.filter(series_name__icontains=series_query)
 
     color_query = request.GET.get("color")
@@ -176,11 +172,9 @@ def stocks_view(request):
     series_filter = request.GET.get("series")
     if series_filter:
         try:
-            # Try to filter by series_id if it's a number
             series_id = int(series_filter)
             stocks_qs = stocks_qs.filter(series__series_id=series_id)
         except ValueError:
-            # Otherwise filter by series_name
             stocks_qs = stocks_qs.filter(series__series_name__icontains=series_filter)
 
     analysis_filters = _analysis_range_filters_from_request(request, prefix="series__analyses__")
@@ -392,7 +386,6 @@ def coating_types_view(request):
     """
     qs = CoatingTypes.objects.all()
     
-    # Поддержка сортировки
     sort = request.GET.get("sort", "nomenclature")
     valid_sort_fields = {
         "id", "-id",
@@ -442,12 +435,10 @@ def product_detail_view(request, product_id):
         pk=product_id
     )
     
-    # Получаем все серии продукта с предзагрузкой analyses и информацией о stocks
     series_list = Series.objects.filter(product=product).select_related("analyses").annotate(
         available_quantity=Coalesce(Sum("stocks__stocks_count"), 0.0)
     )
     
-    # Сериализуем продукт
     coating = product.coating_types
     product_data = {
         "id": product.product_id,
@@ -461,7 +452,6 @@ def product_detail_view(request, product_id):
         },
     }
     
-    # Сериализуем серии с их analyses и информацией о stocks
     series_data = []
     for series in series_list:
         available_qty = float(getattr(series, "available_quantity", 0.0) or 0.0)
@@ -474,12 +464,9 @@ def product_detail_view(request, product_id):
             "in_stock": available_qty > 0,
         }
         
-        # Добавляем все поля из analyses, если они есть
         analyses_data = {}
         analysis = getattr(series, "analyses", None)
         if analysis:
-            # Получаем все поля из модели Analyses
-            # Числовые поля (FloatField)
             float_fields = [
                 "analyses_blesk_pri_60_grad",
                 "analyses_uslovnaya_vyazkost",
@@ -512,7 +499,6 @@ def product_detail_view(request, product_id):
                 if value is not None:
                     analyses_data[field] = value
             
-            # Строковые поля (CharField)
             string_fields = [
                 "analyses_viz_kontrol_poverh",
                 "analyses_vneshnii_vid",
@@ -534,4 +520,53 @@ def product_detail_view(request, product_id):
     }
     
     return JsonResponse(response)
+
+
+@require_GET
+def top_products_view(request):
+    """
+    Получить ТОП 20 самых популярных товаров.
+    
+    Популярность определяется по общему количеству заказанных единиц товара (order_items_count)
+    из всех заказов. Возвращается список из 20 самых популярных товаров, отсортированных
+    по убыванию популярности.
+    """
+    top_products = (
+        OrdersItems.objects
+        .select_related("product", "product__coating_types")
+        .values(
+            "product__product_id",
+            "product__product_name",
+            "product__color",
+            "product__product_price",
+            "product__coating_types__coating_types_id",
+            "product__coating_types__coating_type_name",
+            "product__coating_types__coating_type_nomenclatura",
+        )
+        .annotate(
+            total_ordered=Coalesce(Sum("order_items_count"), 0)
+        )
+        .order_by("-total_ordered", "product__product_id")
+        [:20]
+    )
+    
+    products_list = []
+    for item in top_products:
+        products_list.append({
+            "id": item["product__product_id"],
+            "name": item["product__product_name"],
+            "color_code": item["product__color"],
+            "price": item["product__product_price"],
+            "total_ordered": float(item["total_ordered"] or 0),
+            "coating_type": {
+                "id": item["product__coating_types__coating_types_id"],
+                "name": item["product__coating_types__coating_type_name"],
+                "nomenclature": item["product__coating_types__coating_type_nomenclatura"],
+            } if item["product__coating_types__coating_types_id"] else None,
+        })
+    
+    return JsonResponse({
+        "count": len(products_list),
+        "results": products_list,
+    })
 

@@ -171,6 +171,8 @@ class Users(models.Model):
     user_password_hash = models.CharField(max_length=255)
     user_is_active = models.BooleanField()
     user_created_at = models.DateField()
+    user_name = models.CharField(max_length=50, blank=True, null=True)
+    user_surname = models.CharField(max_length=50, blank=True, null=True)
 
     class Meta:
         managed = False

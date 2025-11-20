@@ -3,19 +3,19 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
 from django.contrib.auth.hashers import make_password
 from django.db import transaction
+from django.http import JsonResponse
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 
 from ..models import Cart, Clients, Users
-from django.utils import timezone
 from .utils import (
     TOKEN_TTL_SECONDS,
     _check_user_password,
-    _issue_token,
     _clip,
+    _issue_token,
     _parse_json_body,
     _serialize_client,
 )
@@ -53,6 +53,8 @@ def login_view(request):
         "user": {
             "id": user.user_id,
             "email": user.user_email,
+            "first_name": getattr(user, "user_name", None),
+            "last_name": getattr(user, "user_surname", None),
             "created_at": user.user_created_at,
             "client": _serialize_client(user.client),
         },
@@ -80,10 +82,9 @@ def register_view(request):
     client_name_raw = payload.get("client_name") or client_block.get("name")
     client_email_raw = payload.get("client_email") or client_block.get("email")
 
-    # Validate required fields
     if not email_raw or not password:
         return JsonResponse({"error": "Fields 'email' and 'password' are required."}, status=400)
-    
+
     if not client_name_raw or not client_email_raw:
         return JsonResponse(
             {"error": "Fields 'client_name' and 'client_email' are required for registration."},
@@ -94,27 +95,24 @@ def register_view(request):
     client_email_normalized = str(client_email_raw).strip().lower()
     client_name_raw_clean = str(client_name_raw).strip()
     client_name_normalized = client_name_raw_clean.lower()
+    user_first_name = _clip(str(payload.get("first_name") or "").strip(), length=50) or None
+    user_last_name = _clip(str(payload.get("last_name") or "").strip(), length=50) or None
 
-    # Validate email format
     if not _validate_email(email):
         return JsonResponse({"error": "Invalid user email format."}, status=400)
-    
+
     if not _validate_email(client_email_normalized):
         return JsonResponse({"error": "Invalid client email format."}, status=400)
 
-    # Check if user already exists
     if Users.objects.filter(user_email__iexact=email).exists():
         return JsonResponse({"error": "User with this email already exists."}, status=409)
 
-    # Validate password length
     if len(str(password)) < 6:
         return JsonResponse({"error": "Password must be at least 6 characters long."}, status=400)
 
-    # Validate client name length
     if len(client_name_raw_clean) == 0:
         return JsonResponse({"error": "Client name cannot be empty."}, status=400)
 
-    # Find or create client with transactional safety
     client_email_clipped = _clip(client_email_normalized, length=30)
     client_name_clipped = _clip(client_name_raw_clean, length=20)
 
@@ -131,7 +129,6 @@ def register_view(request):
                 client_email=client_email_clipped,
             )
 
-        # Create user
         email_clipped = _clip(email, length=30)
         user = Users.objects.create(
             client=client,
@@ -139,10 +136,10 @@ def register_view(request):
             user_password_hash=make_password(str(password)),
             user_is_active=True,
             user_created_at=date.today(),
+            user_name=user_first_name,
+            user_surname=user_last_name,
         )
 
-    # Create cart for user if it doesn't exist
-    # This ensures every user has their own personal cart
     Cart.objects.get_or_create(
         user=user,
         defaults={
@@ -158,9 +155,10 @@ def register_view(request):
         "user": {
             "id": user.user_id,
             "email": user.user_email,
+            "first_name": getattr(user, "user_name", None),
+            "last_name": getattr(user, "user_surname", None),
             "created_at": user.user_created_at,
             "client": _serialize_client(client),
         },
     }
     return JsonResponse(response_payload, status=201)
-

@@ -212,6 +212,8 @@ def client_users_view(request, client_id: int):
         {
           "id": user.user_id,
           "email": user.user_email,
+          "first_name": getattr(user, "user_name", None),
+          "last_name": getattr(user, "user_surname", None),
           "created_at": user.user_created_at,
         }
         for user in users

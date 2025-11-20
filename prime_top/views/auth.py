@@ -7,6 +7,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.hashers import make_password
+from django.db import transaction
 
 from ..models import Cart, Clients, Users
 from django.utils import timezone
@@ -90,14 +91,15 @@ def register_view(request):
         )
 
     email = str(email_raw).strip().lower()
-    client_email = str(client_email_raw).strip().lower()
-    client_name = str(client_name_raw).strip()
+    client_email_normalized = str(client_email_raw).strip().lower()
+    client_name_raw_clean = str(client_name_raw).strip()
+    client_name_normalized = client_name_raw_clean.lower()
 
     # Validate email format
     if not _validate_email(email):
         return JsonResponse({"error": "Invalid user email format."}, status=400)
     
-    if not _validate_email(client_email):
+    if not _validate_email(client_email_normalized):
         return JsonResponse({"error": "Invalid client email format."}, status=400)
 
     # Check if user already exists
@@ -109,35 +111,35 @@ def register_view(request):
         return JsonResponse({"error": "Password must be at least 6 characters long."}, status=400)
 
     # Validate client name length
-    if len(client_name) == 0:
+    if len(client_name_raw_clean) == 0:
         return JsonResponse({"error": "Client name cannot be empty."}, status=400)
 
-    # Find or create client
-    client_email_clipped = _clip(client_email, length=30)
-    client_name_clipped = _clip(client_name, length=20)
-    
-    existing_client = Clients.objects.filter(client_email__iexact=client_email_clipped).first()
-    if existing_client:
-        # Update client name if it's different
-        if existing_client.client_name != client_name_clipped:
-            existing_client.client_name = client_name_clipped
-            existing_client.save(update_fields=["client_name"])
-        client = existing_client
-    else:
-        client = Clients.objects.create(
-            client_name=client_name_clipped,
-            client_email=client_email_clipped,
-        )
+    # Find or create client with transactional safety
+    client_email_clipped = _clip(client_email_normalized, length=30)
+    client_name_clipped = _clip(client_name_raw_clean, length=20)
 
-    # Create user
-    email_clipped = _clip(email, length=30)
-    user = Users.objects.create(
-        client=client,
-        user_email=email_clipped,
-        user_password_hash=make_password(str(password)),
-        user_is_active=True,
-        user_created_at=date.today(),
-    )
+    with transaction.atomic():
+        client = (
+            Clients.objects.filter(
+                client_email__iexact=client_email_normalized,
+                client_name__iexact=client_name_normalized,
+            ).first()
+        )
+        if client is None:
+            client = Clients.objects.create(
+                client_name=client_name_clipped,
+                client_email=client_email_clipped,
+            )
+
+        # Create user
+        email_clipped = _clip(email, length=30)
+        user = Users.objects.create(
+            client=client,
+            user_email=email_clipped,
+            user_password_hash=make_password(str(password)),
+            user_is_active=True,
+            user_created_at=date.today(),
+        )
 
     # Create cart for user if it doesn't exist
     # This ensures every user has their own personal cart

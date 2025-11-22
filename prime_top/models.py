@@ -173,6 +173,7 @@ class Users(models.Model):
     user_created_at = models.DateField()
     user_name = models.CharField(max_length=50, blank=True, null=True)
     user_surname = models.CharField(max_length=50, blank=True, null=True)
+    user_is_admin = models.BooleanField(default=False, db_column='user_is_admin')
 
     class Meta:
         managed = False

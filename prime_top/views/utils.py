@@ -116,6 +116,11 @@ def _authenticate_token(token: str) -> Optional[Users]:
     if not user.user_is_active or user.client_id is None:
         return None
 
+    # Безопасная проверка user_is_admin (на случай, если поле еще не добавлено в БД)
+    if not hasattr(user, 'user_is_admin'):
+        # Если поле не существует, считаем, что пользователь не админ
+        user.user_is_admin = False
+
     return user
 
 
@@ -146,6 +151,29 @@ def require_client_auth(view_func):
         user = _authenticate_token(token)
         if not user:
             return JsonResponse({"error": "Invalid or expired authentication token."}, status=401)
+
+        request.authenticated_user = user
+        request.authenticated_client = user.client
+        return view_func(request, *args, **kwargs)
+
+    return _wrapped
+
+
+def require_admin_auth(view_func):
+    """Декоратор для проверки прав администратора"""
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        token = _extract_token_from_request(request)
+        if not token:
+            return JsonResponse({"error": "Authentication credentials were not provided."}, status=401)
+
+        user = _authenticate_token(token)
+        if not user:
+            return JsonResponse({"error": "Invalid or expired authentication token."}, status=401)
+
+        # Проверка прав админа
+        if not getattr(user, 'user_is_admin', False):
+            return JsonResponse({"error": "Admin access required."}, status=403)
 
         request.authenticated_user = user
         request.authenticated_client = user.client
@@ -342,5 +370,6 @@ __all__ = [
     "_serialize_product",
     "_serialize_series",
     "require_client_auth",
+    "require_admin_auth",
 ]
 

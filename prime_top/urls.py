@@ -33,5 +33,20 @@ urlpatterns = [
     path("analyses/", views.analyses_view, name="analyses"),
     path("orders/", views.orders_view, name="orders"),
     path("orders/<int:order_id>/", views.order_detail_view, name="order-detail"),
+    # Admin endpoints
+    path("admin/products/", views.admin_products_create, name="admin-products-create"),
+    path("admin/products/<int:product_id>/", views.admin_products_update, name="admin-products-update"),
+    path("admin/series/", views.admin_series_create, name="admin-series-create"),
+    path("admin/series/<int:series_id>/", views.admin_series_update, name="admin-series-update"),
+    path("admin/stocks/", views.admin_stocks_list, name="admin-stocks-list"),
+    path("admin/stocks/<int:stocks_id>/", views.admin_stocks_update, name="admin-stocks-update"),
+    path("admin/stocks/<int:stocks_id>/delete/", views.admin_stocks_delete, name="admin-stocks-delete"),
+    path("admin/analyses/<int:series_id>/", views.admin_analyses_create_or_update, name="admin-analyses-create-update"),
+    path("admin/users/", views.admin_users_list, name="admin-users-list"),
+    path("admin/users/<int:user_id>/", views.admin_users_update, name="admin-users-update"),
+    path("admin/coating-types/", views.admin_coating_types_create, name="admin-coating-types-create"),
+    path("admin/coating-types/<int:coating_type_id>/", views.admin_coating_types_update, name="admin-coating-types-update"),
+    path("admin/orders/", views.admin_orders_list, name="admin-orders-list"),
+    path("admin/orders/<int:order_id>/", views.admin_orders_detail, name="admin-orders-detail"),
 ]
 

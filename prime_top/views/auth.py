@@ -56,6 +56,7 @@ def login_view(request):
             "first_name": getattr(user, "user_name", None),
             "last_name": getattr(user, "user_surname", None),
             "created_at": user.user_created_at,
+            "is_admin": getattr(user, "user_is_admin", False),
             "client": _serialize_client(user.client),
         },
     }
@@ -158,6 +159,7 @@ def register_view(request):
             "first_name": getattr(user, "user_name", None),
             "last_name": getattr(user, "user_surname", None),
             "created_at": user.user_created_at,
+            "is_admin": getattr(user, "user_is_admin", False),
             "client": _serialize_client(client),
         },
     }

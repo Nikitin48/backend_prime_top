@@ -26,6 +26,23 @@ from .personal import (
     my_orders_history_view,
     my_stocks_view,
 )
+from .admin import (
+    admin_analyses_create_or_update,
+    admin_coating_types_create,
+    admin_coating_types_update,
+    admin_orders_detail,
+    admin_orders_list,
+    admin_products_create,
+    admin_products_update,
+    admin_series_create,
+    admin_series_update,
+    admin_stocks_create_or_update,
+    admin_stocks_delete,
+    admin_stocks_list,
+    admin_stocks_update,
+    admin_users_list,
+    admin_users_update,
+)
 
 __all__ = [
     "register_view",
@@ -56,5 +73,20 @@ __all__ = [
     "cart_item_detail_view",
     "cart_checkout_view",
     "cart_clear_view",
+    "admin_products_create",
+    "admin_products_update",
+    "admin_series_create",
+    "admin_series_update",
+    "admin_stocks_create_or_update",
+    "admin_stocks_delete",
+    "admin_stocks_list",
+    "admin_stocks_update",
+    "admin_analyses_create_or_update",
+    "admin_users_list",
+    "admin_users_update",
+    "admin_coating_types_create",
+    "admin_coating_types_update",
+    "admin_orders_list",
+    "admin_orders_detail",
 ]
 

@@ -8,7 +8,7 @@ from .cart import (
 )
 from .analyses import analyses_view
 from .coating_types import coating_types_view
-from .products import product_detail_view, products_view, top_products_view
+from .products import product_detail_view, products_search_view, products_view, top_products_view
 from .series import series_view
 from .stocks import available_stocks_view, stocks_view
 from .clients import (
@@ -37,6 +37,7 @@ __all__ = [
     "client_users_view",
     "products_view",
     "product_detail_view",
+    "products_search_view",
     "coating_types_view",
     "series_view",
     "stocks_view",

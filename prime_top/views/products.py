@@ -245,3 +245,66 @@ def top_products_view(request):
         "results": products_list,
     })
 
+
+@require_GET
+def products_search_view(request):
+    """
+    Поиск продуктов по номенклатуре или цвету.
+    
+    Принимает строку поиска и ищет продукты по:
+    - Номенклатуре (coating_type_nomenclatura)
+    - Цвету (color code, включая RAL коды)
+    """
+    search_query = request.GET.get("q")
+    
+    if not search_query:
+        return JsonResponse({
+            "error": "Query parameter 'q' is required."
+        }, status=400)
+    
+    qs = Products.objects.select_related("coating_types").all()
+    
+    # Поиск по номенклатуре
+    search_filter = Q(coating_types__coating_type_nomenclatura__icontains=search_query)
+    
+    # Поиск по цвету (включая нормализацию RAL кодов)
+    normalized_color = _normalized_color(search_query)
+    if normalized_color:
+        try:
+            # Точное совпадение по коду цвета
+            search_filter |= Q(color=int(normalized_color))
+        except ValueError:
+            pass
+        # Также ищем нормализованный код в номенклатуре
+        if normalized_color != search_query:
+            search_filter |= Q(coating_types__coating_type_nomenclatura__icontains=normalized_color)
+    
+    qs = qs.filter(search_filter)
+    qs = qs.order_by("coating_types__coating_type_nomenclatura", "product_name")
+    
+    total_count = qs.count()
+    
+    # Поддержка пагинации
+    offset = request.GET.get("offset")
+    if offset:
+        try:
+            offset_value = int(offset)
+            if offset_value < 0:
+                raise Http404("Query parameter 'offset' must be a non-negative integer.")
+            qs = qs[offset_value:]
+        except ValueError:
+            raise Http404("Query parameter 'offset' must be an integer.")
+    
+    limit = request.GET.get("limit")
+    if limit:
+        try:
+            limit_value = int(limit)
+            if limit_value <= 0:
+                raise Http404("Query parameter 'limit' must be a positive integer.")
+            qs = qs[:limit_value]
+        except ValueError:
+            raise Http404("Query parameter 'limit' must be an integer.")
+    
+    products = [_serialize_product(product) for product in qs]
+    return JsonResponse({"count": total_count, "results": products})
+

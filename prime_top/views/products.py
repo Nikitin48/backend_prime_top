@@ -14,12 +14,21 @@ from .utils import _normalized_color, _serialize_product
 def products_view(request):
     qs = Products.objects.select_related("coating_types").all()
 
-    coating_type_id = request.GET.get("coating_type_id")
-    if coating_type_id:
+    coating_type_ids = request.GET.getlist("coating_type_id")
+    if coating_type_ids:
         try:
-            qs = qs.filter(coating_types__coating_types_id=int(coating_type_id))
+            # Поддержка нескольких coating_type_id: можно передать несколько параметров
+            # или один параметр с запятыми (например: coating_type_id=1,2,3)
+            ids_list = []
+            for coating_type_id in coating_type_ids:
+                # Если значение содержит запятые, разбиваем на отдельные ID
+                if ',' in coating_type_id:
+                    ids_list.extend([int(x.strip()) for x in coating_type_id.split(',')])
+                else:
+                    ids_list.append(int(coating_type_id))
+            qs = qs.filter(coating_types__coating_types_id__in=ids_list)
         except ValueError:
-            raise Http404("Query parameter 'coating_type_id' must be an integer.")
+            raise Http404("Query parameter 'coating_type_id' must be an integer or comma-separated integers.")
 
     name_query = request.GET.get("name")
     if name_query:

@@ -246,7 +246,7 @@ def cart_checkout_view(request):
     if not cart_items.exists():
         return JsonResponse({"error": "Cart is empty. Cannot create order."}, status=400)
 
-    status_value = str(payload.get("status", "pending")).strip()[:30] or "pending"
+    status_value = str(payload.get("status", "В ожидании")).strip()[:30] or "В ожидании"
     note_value = payload.get("status_note")
 
     from django.utils.dateparse import parse_date
@@ -364,7 +364,7 @@ def cart_checkout_view(request):
 
         OrderStatusHistory.objects.create(
             orders=order,
-            order_status_history_from_stat="created",
+            order_status_history_from_stat="Создан",
             order_status_history_to_status=status_value,
             order_status_history_chang_at=timezone.now().strftime("%Y-%m-%d %H:%M:%S"),
             order_status_history_note=str(note_value)[:30] if note_value else "Created from cart",

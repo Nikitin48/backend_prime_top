@@ -77,7 +77,7 @@ def orders_view(request):
     if not isinstance(items_data, list) or not items_data:
         return JsonResponse({"error": "Field 'items' must be a non-empty list."}, status=400)
 
-    status_value = _clip(str(payload.get("status", "pending")).strip() or "pending", length=30)
+    status_value = _clip(str(payload.get("status", "В ожидании")).strip() or "В ожидании", length=30)
     note_value = payload.get("status_note")
 
     try:
@@ -193,7 +193,7 @@ def orders_view(request):
 
         OrderStatusHistory.objects.create(
             orders=order,
-            order_status_history_from_stat=_clip(payload.get("status_from") or "created", length=30),
+            order_status_history_from_stat=_clip(payload.get("status_from") or "Создан", length=30),
             order_status_history_to_status=_clip(status_value, length=30),
             order_status_history_chang_at=timezone.now().strftime("%Y-%m-%d %H:%M:%S"),
             order_status_history_note=_clip(note_value or "Created via API", length=30),

@@ -90,7 +90,7 @@ def client_orders_summary(request, client_id: int):
     summary = _orders_summary_payload(orders_qs)
 
     cancel_details = list(
-        orders_qs.filter(orders_status__iexact="cancelled")
+        orders_qs.filter(orders_status__iexact="Отменён")
         .exclude(Q(orders_cancel_reason__isnull=True) | Q(orders_cancel_reason__exact=""))
         .values("orders_cancel_reason")
         .annotate(

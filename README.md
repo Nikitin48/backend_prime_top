@@ -172,7 +172,7 @@
   ```json
   {
     "client_id": 1,
-    "status": "pending",
+    "status": "В ожидании",
     "items": [
       {"product_id": 5, "series_id": "SR-001", "quantity": 3}
     ],

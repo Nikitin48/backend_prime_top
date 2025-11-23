@@ -1,0 +1,71 @@
+[
+  {
+    "product_name": "Краска белая RAL 9010",
+    "price": 1500,
+    "color_code": 9010,
+    "coating_type_name": "Акриловая краска",
+    "coating_type_nomenclature": "AKR-001"
+  },
+  {
+    "product_name": "Краска синяя RAL 5015",
+    "price": 1800,
+    "color_code": 5015,
+    "coating_type_name": "Акриловая краска",
+    "coating_type_nomenclature": "AKR-001"
+  },
+  {
+    "product_name": "Краска красная RAL 3000",
+    "price": 1700,
+    "color_code": 3000,
+    "coating_type_name": "Акриловая краска",
+    "coating_type_nomenclature": "AKR-001"
+  },
+  {
+    "product_name": "Грунт универсальный белый",
+    "price": 800,
+    "color_code": 9010,
+    "coating_type_name": "Грунт",
+    "coating_type_nomenclature": "GRUNT-001"
+  },
+  {
+    "product_name": "Грунт универсальный серый",
+    "price": 850,
+    "color_code": 7035,
+    "coating_type_name": "Грунт",
+    "coating_type_nomenclature": "GRUNT-001"
+  },
+  {
+    "product_name": "Лак глянцевый прозрачный",
+    "price": 1200,
+    "coating_type_name": "Лак",
+    "coating_type_nomenclature": "LAK-001"
+  },
+  {
+    "product_name": "Лак матовый прозрачный",
+    "price": 1150,
+    "coating_type_name": "Лак",
+    "coating_type_nomenclature": "LAK-001"
+  },
+  {
+    "product_name": "Эмаль черная RAL 9005",
+    "price": 1600,
+    "color_code": 9005,
+    "coating_type_name": "Эмаль",
+    "coating_type_nomenclature": "EMAL-001"
+  },
+  {
+    "product_name": "Эмаль зеленая RAL 6005",
+    "price": 1650,
+    "color_code": 6005,
+    "coating_type_name": "Эмаль",
+    "coating_type_nomenclature": "EMAL-001"
+  },
+  {
+    "product_name": "Краска желтая RAL 1021",
+    "price": 1750,
+    "color_code": 1021,
+    "coating_type_name": "Акриловая краска",
+    "coating_type_nomenclature": "AKR-001"
+  }
+]
+

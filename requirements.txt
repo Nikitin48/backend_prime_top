@@ -3,3 +3,4 @@ Django==5.2.8
 psycopg2-binary==2.9.11
 sqlparse==0.5.3
 django-cors-headers==4.3.1
+requests==2.32.3

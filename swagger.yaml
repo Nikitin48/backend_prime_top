@@ -1,0 +1,1782 @@
+openapi: 3.0.3
+info:
+  title: Prime Top API
+  description: |
+    REST API для системы управления заказами и складом лакокрасочных материалов.
+    
+    Система предоставляет функционал для:
+    - Управления продуктами, сериями и остатками
+    - Создания и отслеживания заказов
+    - Аналитики продаж и популярных позиций
+    - Интеграции с Telegram ботом
+    - Загрузки данных через Data Lake
+    
+    Все защищенные эндпоинты требуют токен аутентификации в заголовке `Authorization: Token <token>`.
+  version: 1.0.0
+  contact:
+    name: Prime Top API Support
+
+servers:
+  - url: http://localhost:8000/api
+    description: Локальный сервер разработки
+  - url: https://api.prime-top.example.com/api
+    description: Production сервер
+
+tags:
+  - name: Authentication
+    description: Аутентификация и регистрация пользователей
+  - name: Products
+    description: Управление продуктами
+  - name: Series
+    description: Управление сериями продуктов
+  - name: Stocks
+    description: Управление остатками на складе
+  - name: Orders
+    description: Управление заказами
+  - name: Cart
+    description: Управление корзиной покупок
+  - name: Clients
+    description: Управление клиентами
+  - name: Coating Types
+    description: Типы покрытий
+  - name: Analyses
+    description: Лабораторные анализы
+  - name: Personal
+    description: Персональные данные пользователя
+  - name: Bot
+    description: Интеграция с Telegram ботом
+  - name: Admin
+    description: Административные функции (требуется admin права)
+  - name: Admin Analytics
+    description: Аналитика для администраторов
+  - name: Admin Data Lake
+    description: Загрузка данных через Data Lake
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Token
+      description: Токен аутентификации, полученный через /auth/login/
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Сообщение об ошибке
+
+    TokenResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT токен для аутентификации
+        expires_in:
+          type: integer
+          description: Время жизни токена в секундах
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        first_name:
+          type: string
+          nullable: true
+        last_name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date
+        is_admin:
+          type: boolean
+        client:
+          $ref: '#/components/schemas/Client'
+
+    Client:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        color_code:
+          type: integer
+        price:
+          type: integer
+        coating_type:
+          $ref: '#/components/schemas/CoatingType'
+
+    CoatingType:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        nomenclature:
+          type: string
+
+    Series:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          nullable: true
+        production_date:
+          type: string
+          format: date
+          nullable: true
+        expire_date:
+          type: string
+          format: date
+          nullable: true
+        product:
+          $ref: '#/components/schemas/Product'
+        available_quantity:
+          type: number
+          format: float
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+        client:
+          $ref: '#/components/schemas/Client'
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date
+        shipped_at:
+          type: string
+          format: date
+          nullable: true
+        delivered_at:
+          type: string
+          format: date
+          nullable: true
+        cancel_reason:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+
+    OrderItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        product:
+          $ref: '#/components/schemas/Product'
+        series:
+          $ref: '#/components/schemas/Series'
+          nullable: true
+        quantity:
+          type: integer
+
+    Cart:
+      type: object
+      properties:
+        id:
+          type: integer
+        user:
+          $ref: '#/components/schemas/User'
+        client:
+          $ref: '#/components/schemas/Client'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+        items_count:
+          type: integer
+        total_quantity:
+          type: number
+          format: float
+        total_price:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CartItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        product:
+          $ref: '#/components/schemas/Product'
+        series:
+          $ref: '#/components/schemas/Series'
+          nullable: true
+        quantity:
+          type: integer
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Регистрация нового пользователя
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - client_name
+                - client_email
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 6
+                client_name:
+                  type: string
+                client_email:
+                  type: string
+                  format: email
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+      responses:
+        '201':
+          description: Пользователь успешно зарегистрирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Пользователь с таким email уже существует
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Вход в систему
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Неверный email или пароль
+        '403':
+          description: Аккаунт неактивен
+
+  /products:
+    get:
+      tags:
+        - Products
+      summary: Список продуктов
+      security: []
+      parameters:
+        - name: coating_type_id
+          in: query
+          schema:
+            type: integer
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: nomenclature
+          in: query
+          schema:
+            type: string
+        - name: color
+          in: query
+          schema:
+            type: string
+        - name: min_price
+          in: query
+          schema:
+            type: integer
+        - name: max_price
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Список продуктов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+
+  /products/{product_id}:
+    get:
+      tags:
+        - Products
+      summary: Детальная информация о продукте
+      security: []
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Информация о продукте
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  product:
+                    $ref: '#/components/schemas/Product'
+                  series:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Series'
+                  series_count:
+                    type: integer
+
+  /products/top:
+    get:
+      tags:
+        - Products
+      summary: ТОП 20 популярных продуктов
+      security: []
+      responses:
+        '200':
+          description: Список популярных продуктов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/Product'
+                        - type: object
+                          properties:
+                            total_ordered:
+                              type: number
+                              format: float
+
+  /products/search:
+    get:
+      tags:
+        - Products
+      summary: Поиск продуктов
+      security: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Результаты поиска
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+
+  /coating-types:
+    get:
+      tags:
+        - Coating Types
+      summary: Список типов покрытий
+      security: []
+      parameters:
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [id, -id, name, -name, nomenclature, -nomenclature]
+            default: nomenclature
+      responses:
+        '200':
+          description: Список типов покрытий
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CoatingType'
+
+  /series:
+    get:
+      tags:
+        - Series
+      summary: Список серий
+      security: []
+      parameters:
+        - name: product_id
+          in: query
+          schema:
+            type: integer
+        - name: series
+          in: query
+          schema:
+            type: string
+        - name: color
+          in: query
+          schema:
+            type: string
+        - name: in_stock
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Список серий
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Series'
+
+  /stocks:
+    get:
+      tags:
+        - Stocks
+      summary: Остатки на складе
+      security: []
+      parameters:
+        - name: client_id
+          in: query
+          schema:
+            type: integer
+        - name: include_public
+          in: query
+          schema:
+            type: boolean
+        - name: personal_only
+          in: query
+          schema:
+            type: boolean
+        - name: series_id
+          in: query
+          schema:
+            type: integer
+        - name: color
+          in: query
+          schema:
+            type: string
+        - name: coating_type
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Список остатков
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  total_count:
+                    type: integer
+                  series:
+                    type: array
+
+  /stocks/available:
+    get:
+      tags:
+        - Stocks
+      summary: Доступные остатки
+      security: []
+      responses:
+        '200':
+          description: Список доступных остатков
+
+  /orders:
+    get:
+      tags:
+        - Orders
+      summary: Список заказов
+      security: []
+      parameters:
+        - name: client_id
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: created_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: created_to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Список заказов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+    post:
+      tags:
+        - Orders
+      summary: Создание заказа
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - client_id
+                - items
+              properties:
+                client_id:
+                  type: integer
+                status:
+                  type: string
+                  default: В ожидании
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - product_id
+                      - quantity
+                    properties:
+                      product_id:
+                        type: integer
+                      series_id:
+                        type: integer
+                      quantity:
+                        type: integer
+                created_at:
+                  type: string
+                  format: date
+                shipped_at:
+                  type: string
+                  format: date
+                delivered_at:
+                  type: string
+                  format: date
+                cancel_reason:
+                  type: string
+                status_note:
+                  type: string
+      responses:
+        '201':
+          description: Заказ создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  /orders/{order_id}:
+    get:
+      tags:
+        - Orders
+      summary: Детальная информация о заказе
+      security: []
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Информация о заказе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+    patch:
+      tags:
+        - Orders
+      summary: Обновление заказа
+      security: []
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                shipped_at:
+                  type: string
+                  format: date
+                delivered_at:
+                  type: string
+                  format: date
+                cancel_reason:
+                  type: string
+                status_note:
+                  type: string
+      responses:
+        '200':
+          description: Заказ обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  /me/cart:
+    get:
+      tags:
+        - Cart
+      summary: Получить корзину
+      responses:
+        '200':
+          description: Корзина пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+
+  /me/cart/items:
+    post:
+      tags:
+        - Cart
+      summary: Добавить товар в корзину
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - product_id
+              properties:
+                product_id:
+                  type: integer
+                series_id:
+                  type: integer
+                quantity:
+                  type: integer
+                  default: 1
+      responses:
+        '200':
+          description: Товар добавлен
+        '201':
+          description: Товар создан в корзине
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItem'
+
+  /me/cart/items/{cart_item_id}:
+    patch:
+      tags:
+        - Cart
+      summary: Обновить товар в корзине
+      parameters:
+        - name: cart_item_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - quantity
+              properties:
+                quantity:
+                  type: integer
+      responses:
+        '200':
+          description: Товар обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItem'
+    delete:
+      tags:
+        - Cart
+      summary: Удалить товар из корзины
+      parameters:
+        - name: cart_item_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Товар удален
+
+  /me/cart/checkout:
+    post:
+      tags:
+        - Cart
+      summary: Оформить заказ из корзины
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  default: В ожидании
+                created_at:
+                  type: string
+                  format: date
+                shipped_at:
+                  type: string
+                  format: date
+                delivered_at:
+                  type: string
+                  format: date
+                cancel_reason:
+                  type: string
+                status_note:
+                  type: string
+      responses:
+        '201':
+          description: Заказ создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Корзина пуста
+
+  /me/cart/clear:
+    delete:
+      tags:
+        - Cart
+      summary: Очистить корзину
+      responses:
+        '200':
+          description: Корзина очищена
+
+  /me/orders/current:
+    get:
+      tags:
+        - Personal
+      summary: Текущие заказы пользователя
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: include_items
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Список текущих заказов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  client:
+                    $ref: '#/components/schemas/Client'
+                  summary:
+                    type: object
+                  total_count:
+                    type: integer
+                  count:
+                    type: integer
+                  orders:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+
+  /me/orders/history:
+    get:
+      tags:
+        - Personal
+      summary: История заказов пользователя
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: created_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: created_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: include_items
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: История заказов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  client:
+                    $ref: '#/components/schemas/Client'
+                  summary:
+                    type: object
+                  total_count:
+                    type: integer
+                  count:
+                    type: integer
+                  orders:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+
+  /me/orders/all:
+    get:
+      tags:
+        - Personal
+      summary: Все заказы пользователя
+      responses:
+        '200':
+          description: Все заказы
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  client:
+                    $ref: '#/components/schemas/Client'
+                  orders:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+
+  /me/orders/{order_id}:
+    get:
+      tags:
+        - Personal
+      summary: Детали заказа пользователя
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Детали заказа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  /me/stocks:
+    get:
+      tags:
+        - Personal
+      summary: Остатки пользователя
+      parameters:
+        - name: include_public
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: personal_only
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Остатки пользователя
+
+  /clients:
+    get:
+      tags:
+        - Clients
+      summary: Список клиентов
+      security: []
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Список клиентов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Client'
+    post:
+      tags:
+        - Clients
+      summary: Создать клиента
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - email
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+      responses:
+        '201':
+          description: Клиент создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+
+  /clients/{client_id}:
+    get:
+      tags:
+        - Clients
+      summary: Информация о клиенте
+      security: []
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Информация о клиенте
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+    patch:
+      tags:
+        - Clients
+      summary: Обновить клиента
+      security: []
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Клиент обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+
+  /clients/{client_id}/orders/summary:
+    get:
+      tags:
+        - Clients
+      summary: Сводка по заказам клиента
+      security: []
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Сводка по заказам
+
+  /clients/{client_id}/orders:
+    get:
+      tags:
+        - Clients
+      summary: Детали заказов клиента
+      security: []
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: series
+          in: query
+          schema:
+            type: string
+        - name: color
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Детали заказов
+
+  /analyses:
+    get:
+      tags:
+        - Analyses
+      summary: Подбор серий по лабораторным анализам
+      security: []
+      parameters:
+        - name: client_id
+          in: query
+          schema:
+            type: integer
+        - name: accessible_only
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: sort
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Результаты подбора
+
+  /bot/link:
+    post:
+      tags:
+        - Bot
+      summary: Привязать Telegram чат к пользователю
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - chat_id
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                chat_id:
+                  type: integer
+                username:
+                  type: string
+      responses:
+        '200':
+          description: Чат привязан
+        '201':
+          description: Связь создана
+
+  /bot/unlink:
+    post:
+      tags:
+        - Bot
+      summary: Отвязать Telegram чат
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - chat_id
+              properties:
+                chat_id:
+                  type: integer
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Чат отвязан
+
+  /bot/orders:
+    get:
+      tags:
+        - Bot
+      summary: Заказы для Telegram бота
+      security: []
+      parameters:
+        - name: chat_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Список заказов
+
+  /bot/orders/{order_id}:
+    get:
+      tags:
+        - Bot
+      summary: Детали заказа для Telegram бота
+      security: []
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: chat_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Детали заказа
+
+  /bot/profile:
+    get:
+      tags:
+        - Bot
+      summary: Профиль пользователя для Telegram бота
+      security: []
+      parameters:
+        - name: chat_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Профиль пользователя
+
+  /admin/products:
+    post:
+      tags:
+        - Admin
+      summary: Создать продукт (требуется admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - coating_type_id
+                - name
+                - color_code
+                - price
+              properties:
+                coating_type_id:
+                  type: integer
+                name:
+                  type: string
+                color_code:
+                  type: integer
+                price:
+                  type: integer
+      responses:
+        '201':
+          description: Продукт создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+
+  /admin/products/{product_id}:
+    patch:
+      tags:
+        - Admin
+      summary: Обновить продукт (требуется admin)
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                coating_type_id:
+                  type: integer
+                name:
+                  type: string
+                color_code:
+                  type: integer
+                price:
+                  type: integer
+      responses:
+        '200':
+          description: Продукт обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+    delete:
+      tags:
+        - Admin
+      summary: Удалить продукт (требуется admin)
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Продукт удален
+
+  /admin/series:
+    post:
+      tags:
+        - Admin
+      summary: Создать серию (требуется admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - product_id
+              properties:
+                product_id:
+                  type: integer
+                name:
+                  type: string
+                production_date:
+                  type: string
+                  format: date
+                expire_date:
+                  type: string
+                  format: date
+      responses:
+        '201':
+          description: Серия создана
+
+  /admin/series/{series_id}:
+    patch:
+      tags:
+        - Admin
+      summary: Обновить серию (требуется admin)
+      parameters:
+        - name: series_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                product_id:
+                  type: integer
+                name:
+                  type: string
+                production_date:
+                  type: string
+                  format: date
+                expire_date:
+                  type: string
+                  format: date
+      responses:
+        '200':
+          description: Серия обновлена
+
+  /admin/stocks:
+    get:
+      tags:
+        - Admin
+      summary: Список остатков (требуется admin)
+      responses:
+        '200':
+          description: Список остатков
+
+  /admin/stocks/{stocks_id}:
+    patch:
+      tags:
+        - Admin
+      summary: Обновить остаток (требуется admin)
+      parameters:
+        - name: stocks_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                series_id:
+                  type: integer
+                client_id:
+                  type: integer
+                quantity:
+                  type: number
+                  format: float
+                is_reserved:
+                  type: boolean
+      responses:
+        '200':
+          description: Остаток обновлен
+    delete:
+      tags:
+        - Admin
+      summary: Удалить остаток (требуется admin)
+      parameters:
+        - name: stocks_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Остаток удален
+
+  /admin/analyses/{series_id}:
+    post:
+      tags:
+        - Admin
+      summary: Создать/обновить анализы для серии (требуется admin)
+      parameters:
+        - name: series_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                analyses_blesk_pri_60_grad:
+                  type: number
+                  format: float
+                analyses_uslovnaya_vyazkost:
+                  type: number
+                  format: float
+      responses:
+        '200':
+          description: Анализы сохранены
+
+  /admin/users:
+    get:
+      tags:
+        - Admin
+      summary: Список пользователей (требуется admin)
+      responses:
+        '200':
+          description: Список пользователей
+
+  /admin/users/{user_id}:
+    patch:
+      tags:
+        - Admin
+      summary: Обновить пользователя (требуется admin)
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                is_active:
+                  type: boolean
+                is_admin:
+                  type: boolean
+      responses:
+        '200':
+          description: Пользователь обновлен
+
+  /admin/coating-types:
+    post:
+      tags:
+        - Admin
+      summary: Создать тип покрытия (требуется admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - nomenclature
+              properties:
+                name:
+                  type: string
+                nomenclature:
+                  type: string
+      responses:
+        '201':
+          description: Тип покрытия создан
+
+  /admin/coating-types/{coating_type_id}:
+    patch:
+      tags:
+        - Admin
+      summary: Обновить тип покрытия (требуется admin)
+      parameters:
+        - name: coating_type_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                nomenclature:
+                  type: string
+      responses:
+        '200':
+          description: Тип покрытия обновлен
+
+  /admin/orders:
+    get:
+      tags:
+        - Admin
+      summary: Список заказов (требуется admin)
+      parameters:
+        - name: client_id
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: created_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: created_to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Список заказов
+
+  /admin/orders/{order_id}:
+    get:
+      tags:
+        - Admin
+      summary: Детали заказа (требуется admin)
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Детали заказа
+
+  /admin/analytics/top-products:
+    get:
+      tags:
+        - Admin Analytics
+      summary: ТОП продуктов по продажам (требуется admin)
+      parameters:
+        - name: created_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: created_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: client_id
+          in: query
+          schema:
+            type: integer
+        - name: coating_type_id
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: ТОП продуктов
+
+  /admin/analytics/top-series:
+    get:
+      tags:
+        - Admin Analytics
+      summary: ТОП серий по потреблению (требуется admin)
+      parameters:
+        - name: created_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: created_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: client_id
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: ТОП серий
+
+  /admin/analytics/top-coating-types:
+    get:
+      tags:
+        - Admin Analytics
+      summary: ТОП типов покрытий (требуется admin)
+      parameters:
+        - name: created_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: created_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: client_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: ТОП типов покрытий
+
+  /admin/data-lake/upload:
+    post:
+      tags:
+        - Admin Data Lake
+      summary: Загрузить данные через Data Lake (требуется admin)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - data_type
+              properties:
+                file:
+                  type: string
+                  format: binary
+                data_type:
+                  type: string
+                  enum: [products, series, stocks, orders]
+      responses:
+        '200':
+          description: Данные загружены успешно
+        '207':
+          description: Данные загружены с ошибками
+
+  /admin/data-lake/info:
+    get:
+      tags:
+        - Admin Data Lake
+      summary: Информация о форматах Data Lake (требуется admin)
+      responses:
+        '200':
+          description: Информация о форматах
+

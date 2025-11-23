@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -169,3 +170,22 @@ CORS_ALLOW_HEADERS = [
 
 # Разрешить отправку cookies (если нужно)
 CORS_ALLOW_CREDENTIALS = True
+# Telegram bot notifications (demo defaults; override via env)
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8538348155:AAHGYDfbYuQjZg1knLZPM3TAfgKWtQDH9TU")
+TELEGRAM_API_URL = os.getenv("TELEGRAM_API_URL", "https://api.telegram.org")
+NOTIFY_TG_ENABLED = os.getenv("NOTIFY_TG_ENABLED", "true").lower() == "true"
+
+# Logging: show app logs (incl. notifier) in console
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "loggers": {
+        "prime_top": {"handlers": ["console"], "level": "INFO"},
+        "prime_top.services.telegram_notifier": {"handlers": ["console"], "level": "INFO"},
+    },
+}

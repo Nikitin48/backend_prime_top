@@ -56,7 +56,14 @@ def notify_order_status_change(order: Orders, from_status: str | None, to_status
     Notify all active Telegram links of the client's users about order status change.
     Returns count of attempted deliveries.
     """
-    links: Iterable[TelegramLink] = TelegramLink.objects.filter(
+    logger.info(
+        "Trigger notify_order_status_change: order_id=%s, client_id=%s, from=%s, to=%s",
+        order.orders_id,
+        order.client_id,
+        from_status,
+        to_status,
+    )
+    links: Iterable[TelegramLink] = TelegramLink.objects.select_related("user").filter(
         user__client=order.client,
         is_active=True,
     )
@@ -69,10 +76,33 @@ def notify_order_status_change(order: Orders, from_status: str | None, to_status
     text = ". ".join(parts)
 
     sent = 0
-    for link in links:
-        if send_message(link.tg_chat_id, text):
+    links_list = list(links)
+    if not links_list:
+        logger.info("Telegram notification skipped: no active links for client_id=%s order_id=%s", order.client_id, order.orders_id)
+        return 0
+
+    for link in links_list:
+        ok = send_message(link.tg_chat_id, text)
+        if ok:
             link.last_status_sent_at = getattr(order, "orders_created_at", None) or getattr(order, "orders_delivered_at", None)
             link.save(update_fields=["last_status_sent_at"])
+            logger.info(
+                "Telegram notification sent: chat_id=%s, user=%s, order_id=%s, status %s->%s",
+                link.tg_chat_id,
+                getattr(link.user, "user_email", None),
+                order.orders_id,
+                from_status,
+                to_status,
+            )
+        else:
+            logger.warning(
+                "Telegram notification FAILED: chat_id=%s, user=%s, order_id=%s, status %s->%s",
+                link.tg_chat_id,
+                getattr(link.user, "user_email", None),
+                order.orders_id,
+                from_status,
+                to_status,
+            )
         sent += 1
     return sent
 

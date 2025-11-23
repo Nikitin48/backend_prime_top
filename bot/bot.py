@@ -1,7 +1,8 @@
-import asyncio
+﻿import asyncio
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Optional
 
 import aiohttp
@@ -19,7 +20,6 @@ from aiogram.types import (
     InlineKeyboardButton,
 )
 from aiogram.client.default import DefaultBotProperties
-from pathlib import Path
 
 # -----------------------------------------------------------------------------
 # Config
@@ -69,9 +69,21 @@ def authed_menu() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="/profile")],
             [KeyboardButton(text="/orders")],
+            [KeyboardButton(text="/help")],
             [KeyboardButton(text="/unlink")],
         ],
         resize_keyboard=True,
+    )
+
+
+def orders_menu_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Все заказы", callback_data="status:all")],
+            [InlineKeyboardButton(text="Текущие", callback_data="status:current")],
+            [InlineKeyboardButton(text="Завершенные", callback_data="status:completed")],
+            [InlineKeyboardButton(text="Отмененные", callback_data="status:cancelled")],
+        ]
     )
 
 
@@ -115,16 +127,30 @@ async def api_get(session: aiohttp.ClientSession, path: str, params: dict) -> tu
 # -----------------------------------------------------------------------------
 
 
-async def cmd_start(message: types.Message, state: FSMContext):
+async def cmd_help(message: types.Message, state: FSMContext):
     await state.clear()
-    # Проверим, есть ли привязка
-    linked = await is_linked(message.chat.id)
+    text = (
+        "Как пользоваться ботом:\n\n"
+        "• /link — привязать аккаунт (e-mail и пароль с сайта). Без привязки заказы и уведомления недоступны.\n"
+        "• /profile — показать ваши данные и компанию.\n"
+        "• /orders — список заказов с фильтрами: Все, Текущие, Завершенные, Отмененные."
+        " В списке можно обновить или вернуться к выбору фильтра.\n"
+        "• /unlink — отключить уведомления и отвязать чат.\n"
+        "• /reset — полный сброс (отвязка) + при необходимости очистите историю чата вручную.\n"
+    )
+    await message.answer(text, reply_markup=authed_menu())
+
+
+async def cmd_start(message: types.Message, state: FSMContext, session: aiohttp.ClientSession):
+    await state.clear()
+    linked = await is_linked(session, message.chat.id)
     if linked:
         text = (
-            "Снова на связи! Ваш чат привязан.\n\n"
+            "Снова на связи! Чат привязан.\n\n"
             "Меню:\n"
             "• /profile — профиль\n"
             "• /orders — заказы\n"
+            "• /help — подсказки\n"
             "• /unlink — отключить уведомления"
         )
         await message.answer(text, reply_markup=authed_menu())
@@ -166,7 +192,7 @@ async def process_password(message: types.Message, state: FSMContext, session: a
     }
     status, resp = await api_post(session, "/bot/link/", payload)
 
-    if status == 201 or status == 200:
+    if status in (200, 201):
         await message.answer(
             "Готово! Чат привязан. Теперь я буду слать уведомления при смене статуса заказов.\n\n"
             "Меню: /profile, /orders, /unlink",
@@ -174,6 +200,10 @@ async def process_password(message: types.Message, state: FSMContext, session: a
         )
         await state.clear()
         return
+
+    detail = resp.get("detail")
+    err = resp.get("error", "Ошибка")
+    msg = err if not detail else f"{err}: {detail}"
 
     if status == 401:
         await message.answer(
@@ -186,7 +216,7 @@ async def process_password(message: types.Message, state: FSMContext, session: a
     elif status == 409:
         await message.answer("Этот чат уже привязан к другому аккаунту. Используйте /unlink или другой чат.", reply_markup=guest_menu())
     else:
-        await message.answer(f"Не удалось привязать: {resp.get('error', 'ошибка')}", reply_markup=guest_menu())
+        await message.answer(f"Не удалось привязать: {msg}", reply_markup=guest_menu())
     await state.clear()
 
 
@@ -200,31 +230,12 @@ async def cmd_unlink(message: types.Message, state: FSMContext, session: aiohttp
     await state.clear()
 
 
-async def cmd_orders(message: types.Message, state: FSMContext, session: aiohttp.ClientSession):
-    linked = await check_linked(session, message.chat.id)
-    if not linked:
-        await message.answer("Активная привязка не найдена. Сначала выполните /link.", reply_markup=guest_menu())
-        return
-
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Текущие", callback_data="status:pending")],
-            [InlineKeyboardButton(text="Завершенные", callback_data="status:delivered")],
-        ]
-    )
-    await message.answer("Выберите категорию заказов:", reply_markup=kb)
-    await state.clear()
-
-
 async def cmd_cancel(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("Действие отменено.", reply_markup=guest_menu())
 
 
 async def cmd_reset(message: types.Message, state: FSMContext, session: aiohttp.ClientSession):
-    """
-    Сброс состояния: отвязываем чат, очищаем FSM, показываем приветствие.
-    """
     await state.clear()
     await api_post(session, "/bot/unlink/", {"chat_id": message.chat.id})
     text = (
@@ -257,12 +268,25 @@ async def cmd_profile(message: types.Message, state: FSMContext, session: aiohtt
     await state.clear()
 
 
+async def cmd_orders(message: types.Message, state: FSMContext, session: aiohttp.ClientSession):
+    linked = await check_linked(session, message.chat.id)
+    if not linked:
+        await message.answer("Активная привязка не найдена. Сначала выполните /link.", reply_markup=guest_menu())
+        return
+    await send_orders_menu(message)
+    await state.clear()
+
+
 async def cmd_orders_current(message: types.Message, state: FSMContext, session: aiohttp.ClientSession):
-    await send_orders_with_status(message, session, status_value="pending", title="Текущие заказы")
+    await send_orders_with_status(message, session, status_value="current", title="Текущие заказы")
 
 
 async def cmd_orders_completed(message: types.Message, state: FSMContext, session: aiohttp.ClientSession):
-    await send_orders_with_status(message, session, status_value="delivered", title="Завершенные заказы")
+    await send_orders_with_status(message, session, status_value="completed", title="Завершенные заказы")
+
+
+async def send_orders_menu(message: types.Message):
+    await message.answer("Выберите категорию заказов:", reply_markup=orders_menu_keyboard())
 
 
 async def send_orders_with_status(message: types.Message, session: aiohttp.ClientSession, status_value: Optional[str], title: str):
@@ -275,30 +299,34 @@ async def send_orders_with_status(message: types.Message, session: aiohttp.Clien
             await message.answer("Активная привязка не найдена. Сначала выполните /link.", reply_markup=guest_menu())
         else:
             detail = resp.get("detail")
-            err = resp.get("error", "ошибка")
+            err = resp.get("error", "Ошибка")
             msg = err if not detail else f"{err}: {detail}"
             await message.answer(f"Не удалось получить заказы: {msg}", reply_markup=authed_menu())
         return
 
     orders = resp.get("orders") or []
-    if not orders:
-        await message.answer(f"{title}: нет записей.", reply_markup=authed_menu())
-        return
-
     buttons = []
     for o in orders:
         order_id = o.get("id")
         buttons.append([InlineKeyboardButton(text=f"Заказ #{order_id}", callback_data=f"order:{order_id}")])
 
+    buttons.append(
+        [
+            InlineKeyboardButton(text="Обновить", callback_data=f"refresh:{status_value or 'all'}"),
+            InlineKeyboardButton(text="Назад", callback_data="orders_menu"),
+        ]
+    )
+
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
-    await message.answer(title, reply_markup=kb)
+    caption = title if orders else f"{title}: нет записей."
+    await message.answer(caption, reply_markup=kb)
 
 
 async def send_order_detail(message: types.Message, session: aiohttp.ClientSession, order_id: int):
     status, resp = await api_get(session, f"/bot/orders/{order_id}/", {"chat_id": message.chat.id})
     if status != 200:
         detail = resp.get("detail")
-        err = resp.get("error", "ошибка")
+        err = resp.get("error", "Ошибка")
         msg = err if not detail else f"{err}: {detail}"
         await message.answer(f"Не удалось получить заказ #{order_id}: {msg}", reply_markup=authed_menu())
         return
@@ -331,10 +359,9 @@ async def send_order_detail(message: types.Message, session: aiohttp.ClientSessi
 # -----------------------------------------------------------------------------
 
 
-async def is_linked(chat_id: int) -> bool:
-    async with aiohttp.ClientSession() as session:
-        status, _ = await api_get(session, "/bot/profile/", {"chat_id": chat_id})
-        return status == 200
+async def is_linked(session: aiohttp.ClientSession, chat_id: int) -> bool:
+    status, _ = await api_get(session, "/bot/profile/", {"chat_id": chat_id})
+    return status == 200
 
 
 async def check_linked(session: aiohttp.ClientSession, chat_id: int) -> bool:
@@ -343,9 +370,6 @@ async def check_linked(session: aiohttp.ClientSession, chat_id: int) -> bool:
 
 
 async def send_welcome_with_logo(message: types.Message, text: str):
-    """
-    Отправляет приветствие с логотипом (image_vid/logo.png), если файл доступен.
-    """
     logo_path = Path(__file__).resolve().parent.parent / "image_vid" / "logo.png"
     if logo_path.exists():
         try:
@@ -364,10 +388,13 @@ async def send_welcome_with_logo(message: types.Message, text: str):
 
 def register_handlers(dp: Dispatcher, session: aiohttp.ClientSession):
     async def start_handler(message: types.Message, state: FSMContext):
-        await cmd_start(message, state)
+        await cmd_start(message, state, session)
 
     async def link_handler(message: types.Message, state: FSMContext):
         await cmd_link(message, state)
+
+    async def help_handler(message: types.Message, state: FSMContext):
+        await cmd_help(message, state)
 
     async def unlink_handler(message: types.Message, state: FSMContext):
         await cmd_unlink(message, state, session)
@@ -384,6 +411,9 @@ def register_handlers(dp: Dispatcher, session: aiohttp.ClientSession):
     async def orders_completed_handler(message: types.Message, state: FSMContext):
         await cmd_orders_completed(message, state, session)
 
+    async def orders_cancelled_handler(message: types.Message, state: FSMContext):
+        await send_orders_with_status(message, session, status_value="cancelled", title="Отмененные заказы")
+
     async def cancel_handler(message: types.Message, state: FSMContext):
         await cmd_cancel(message, state)
 
@@ -394,7 +424,14 @@ def register_handlers(dp: Dispatcher, session: aiohttp.ClientSession):
         data = callback.data or ""
         if data.startswith("status:"):
             status_value = data.split(":", 1)[1]
-            title = "Текущие заказы" if status_value == "pending" else "Завершенные заказы"
+            if status_value == "current":
+                title = "Текущие заказы"
+            elif status_value == "completed":
+                title = "Завершенные заказы"
+            elif status_value in ("cancelled", "canceled"):
+                title = "Отмененные заказы"
+            else:
+                title = "Все заказы"
             linked = await check_linked(session, callback.message.chat.id)
             if not linked:
                 await callback.answer("Сначала привяжите аккаунт через /link", show_alert=True)
@@ -413,14 +450,36 @@ def register_handlers(dp: Dispatcher, session: aiohttp.ClientSession):
                 return
             await send_order_detail(callback.message, session, order_id)
             await callback.answer()
+        elif data.startswith("refresh:"):
+            status_value = data.split(":", 1)[1]
+            if status_value == "current":
+                title = "Текущие заказы"
+            elif status_value == "completed":
+                title = "Завершенные заказы"
+            elif status_value in ("cancelled", "canceled"):
+                title = "Отмененные заказы"
+            else:
+                title = "Все заказы"
+            await send_orders_with_status(
+                callback.message,
+                session,
+                status_value=status_value if status_value != "all" else None,
+                title=title,
+            )
+            await callback.answer("Обновлено")
+        elif data == "orders_menu":
+            await send_orders_menu(callback.message)
+            await callback.answer()
 
     dp.message.register(start_handler, Command("start"))
+    dp.message.register(help_handler, Command("help"))
     dp.message.register(link_handler, Command("link"))
     dp.message.register(unlink_handler, Command("unlink"))
     dp.message.register(profile_handler, Command("profile"))
     dp.message.register(orders_handler, Command("orders"))
     dp.message.register(orders_current_handler, Command("present"))
     dp.message.register(orders_completed_handler, Command("completed"))
+    dp.message.register(orders_cancelled_handler, Command("cancelled"))
     dp.message.register(cancel_handler, Command("cancel"))
     dp.message.register(reset_handler, Command("reset"))
     dp.callback_query.register(status_callback_handler)

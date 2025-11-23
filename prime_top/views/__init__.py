@@ -52,6 +52,13 @@ from .data_lake import (
     admin_data_lake_info,
     admin_data_lake_upload,
 )
+from .bot import (
+    bot_link_view,
+    bot_unlink_view,
+    bot_orders_view,
+    bot_order_detail_view,
+    bot_profile_view,
+)
 
 __all__ = [
     "register_view",
@@ -102,5 +109,10 @@ __all__ = [
     "admin_analytics_top_coating_types",
     "admin_data_lake_upload",
     "admin_data_lake_info",
+    "bot_link_view",
+    "bot_unlink_view",
+    "bot_orders_view",
+    "bot_order_detail_view",
+    "bot_profile_view",
 ]
 

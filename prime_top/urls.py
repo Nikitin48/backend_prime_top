@@ -5,6 +5,12 @@ from . import views
 app_name = "prime_top"
 
 urlpatterns = [
+    # Bot endpoints
+    path("bot/link/", views.bot_link_view, name="bot-link"),
+    path("bot/unlink/", views.bot_unlink_view, name="bot-unlink"),
+    path("bot/orders/", views.bot_orders_view, name="bot-orders"),
+    path("bot/orders/<int:order_id>/", views.bot_order_detail_view, name="bot-order-detail"),
+    path("bot/profile/", views.bot_profile_view, name="bot-profile"),
     path("auth/register/", views.register_view, name="register"),
     path("auth/login/", views.login_view, name="login"),
     path("clients/", views.clients_view, name="clients"),

@@ -43,6 +43,11 @@ from .admin import (
     admin_users_list,
     admin_users_update,
 )
+from .admin_analytics import (
+    admin_analytics_top_coating_types,
+    admin_analytics_top_products,
+    admin_analytics_top_series,
+)
 
 __all__ = [
     "register_view",
@@ -88,5 +93,8 @@ __all__ = [
     "admin_coating_types_update",
     "admin_orders_list",
     "admin_orders_detail",
+    "admin_analytics_top_products",
+    "admin_analytics_top_series",
+    "admin_analytics_top_coating_types",
 ]
 

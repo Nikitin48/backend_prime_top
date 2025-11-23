@@ -48,5 +48,9 @@ urlpatterns = [
     path("admin/coating-types/<int:coating_type_id>/", views.admin_coating_types_update, name="admin-coating-types-update"),
     path("admin/orders/", views.admin_orders_list, name="admin-orders-list"),
     path("admin/orders/<int:order_id>/", views.admin_orders_detail, name="admin-orders-detail"),
+    # Admin analytics endpoints
+    path("admin/analytics/top-products/", views.admin_analytics_top_products, name="admin-analytics-top-products"),
+    path("admin/analytics/top-series/", views.admin_analytics_top_series, name="admin-analytics-top-series"),
+    path("admin/analytics/top-coating-types/", views.admin_analytics_top_coating_types, name="admin-analytics-top-coating-types"),
 ]
 

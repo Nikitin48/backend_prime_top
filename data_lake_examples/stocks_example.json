@@ -1,35 +1,14 @@
 [
   {
-    "series_id": 1,
+    "series_id": 207,
     "quantity": 150.5,
     "is_reserved": false
   },
   {
-    "series_id": 1,
+    "series_id": 208,
     "quantity": 50.0,
-    "client_id": 1,
+    "client_id": 11,
     "is_reserved": true
-  },
-  {
-    "series_id": 2,
-    "quantity": 200.0,
-    "is_reserved": false
-  },
-  {
-    "series_id": 3,
-    "quantity": 75.5,
-    "is_reserved": false
-  },
-  {
-    "series_id": 4,
-    "quantity": 100.0,
-    "client_id": 2,
-    "is_reserved": true
-  },
-  {
-    "series_id": 5,
-    "quantity": 300.0,
-    "is_reserved": false
   }
 ]
 

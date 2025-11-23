@@ -1,24 +1,17 @@
-"""
-Data Lake Integration Module
-Модуль для загрузки и обработки данных из JSON файлов
-"""
-
 from __future__ import annotations
 
 import json
 import traceback
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 from uuid import uuid4
 
 from django.db import connection, transaction
 from django.http import JsonResponse
-from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from ..models import (
-    Analyses,
     Clients,
     CoatingTypes,
     Orders,
@@ -27,30 +20,20 @@ from ..models import (
     Series,
     Stocks,
 )
-from .utils import _clip, _parse_iso_date, _parse_json_body, require_admin_auth
-
-
-# ============================================================================
-# Вспомогательные функции для парсинга
-# ============================================================================
+from .utils import _clip, _parse_iso_date, require_admin_auth
 
 
 def _parse_json_file(file_content: bytes) -> List[Dict[str, Any]]:
-    """Парсинг JSON файла в список словарей"""
     try:
         text_content = file_content.decode("utf-8")
         data = json.loads(text_content)
         
-        # Если это список, возвращаем как есть
         if isinstance(data, list):
             return data
-        # Если это объект с ключом, содержащим список
         elif isinstance(data, dict):
-            # Ищем первый ключ, который содержит список
             for key, value in data.items():
                 if isinstance(value, list):
                     return value
-            # Если не нашли список, оборачиваем объект в список
             return [data]
         else:
             raise ValueError("JSON должен содержать массив объектов или объект с массивом")
@@ -60,16 +43,9 @@ def _parse_json_file(file_content: bytes) -> List[Dict[str, Any]]:
         raise ValueError(f"Ошибка обработки JSON: {str(e)}")
 
 
-# ============================================================================
-# Валидация и нормализация данных
-# ============================================================================
-
-
 def _normalize_product_data(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Нормализация данных продукта из загруженного файла"""
     normalized = {}
     
-    # Маппинг полей продукта
     field_mapping = {
         "product_id": ["product_id", "id", "productId"],
         "product_name": ["product_name", "name", "productName", "product_name"],
@@ -84,7 +60,6 @@ def _normalize_product_data(row: Dict[str, Any]) -> Dict[str, Any]:
         for source_field in source_fields:
             if source_field in row and row[source_field] is not None:
                 value = row[source_field]
-                # Преобразование типов
                 if target_field in ["product_id", "color_code", "coating_type_id"]:
                     try:
                         normalized[target_field] = int(value)
@@ -103,7 +78,6 @@ def _normalize_product_data(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _normalize_series_data(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Нормализация данных серии из загруженного файла"""
     normalized = {}
     
     field_mapping = {
@@ -139,7 +113,6 @@ def _normalize_series_data(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _normalize_stock_data(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Нормализация данных остатка из загруженного файла"""
     normalized = {}
     
     field_mapping = {
@@ -183,7 +156,6 @@ def _normalize_stock_data(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _normalize_order_data(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Нормализация данных заказа из загруженного файла"""
     normalized = {}
     
     field_mapping = {
@@ -229,23 +201,13 @@ def _normalize_order_data(row: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
-# ============================================================================
-# Обработка данных и сохранение в БД
-# ============================================================================
-
-
-def _process_products_data(normalized_rows: List[Dict[str, Any]], dry_run: bool = False) -> Dict[str, Any]:
-    """Обработка и сохранение продуктов"""
+def _process_products_data(normalized_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     results = {
         "processed": 0,
         "created": 0,
         "updated": 0,
         "errors": [],
     }
-    
-    if dry_run:
-        results["processed"] = len(normalized_rows)
-        return results
     
     with transaction.atomic():
         for idx, row in enumerate(normalized_rows, 1):
@@ -266,7 +228,6 @@ def _process_products_data(normalized_rows: List[Dict[str, Any]], dry_run: bool 
                     results["errors"].append(f"Строка {idx}: отсутствует цена")
                     continue
                 
-                # Получаем или создаем тип покрытия
                 coating_type = None
                 if coating_type_id:
                     try:
@@ -275,7 +236,6 @@ def _process_products_data(normalized_rows: List[Dict[str, Any]], dry_run: bool 
                         results["errors"].append(f"Строка {idx}: тип покрытия {coating_type_id} не найден")
                         continue
                 elif coating_type_name or coating_type_nomenclature:
-                    # Создаем новый тип покрытия
                     if not coating_type_nomenclature:
                         coating_type_nomenclature = coating_type_name or f"TYPE_{uuid4().hex[:8]}"
                     coating_type, created = CoatingTypes.objects.get_or_create(
@@ -287,13 +247,11 @@ def _process_products_data(normalized_rows: List[Dict[str, Any]], dry_run: bool 
                     results["errors"].append(f"Строка {idx}: не указан тип покрытия")
                     continue
                 
-                # Создаем или обновляем продукт
                 product_name_clipped = _clip(product_name, length=40)
                 color_code_int = int(color_code) if color_code is not None else 0
                 price_int = int(price)
                 
                 if product_id:
-                    # Обновление существующего продукта
                     try:
                         with connection.cursor() as cursor:
                             cursor.execute(
@@ -313,7 +271,6 @@ def _process_products_data(normalized_rows: List[Dict[str, Any]], dry_run: bool 
                         results["errors"].append(f"Строка {idx}: ошибка обновления продукта: {str(e)}")
                         continue
                 else:
-                    # Создание нового продукта
                     try:
                         with connection.cursor() as cursor:
                             cursor.execute(
@@ -337,18 +294,13 @@ def _process_products_data(normalized_rows: List[Dict[str, Any]], dry_run: bool 
     return results
 
 
-def _process_series_data(normalized_rows: List[Dict[str, Any]], dry_run: bool = False) -> Dict[str, Any]:
-    """Обработка и сохранение серий"""
+def _process_series_data(normalized_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     results = {
         "processed": 0,
         "created": 0,
         "updated": 0,
         "errors": [],
     }
-    
-    if dry_run:
-        results["processed"] = len(normalized_rows)
-        return results
     
     with transaction.atomic():
         for idx, row in enumerate(normalized_rows, 1):
@@ -372,7 +324,6 @@ def _process_series_data(normalized_rows: List[Dict[str, Any]], dry_run: bool = 
                 series_name_clipped = _clip(series_name, length=20) if series_name else None
                 
                 if series_id:
-                    # Обновление существующей серии
                     try:
                         with connection.cursor() as cursor:
                             cursor.execute(
@@ -392,7 +343,6 @@ def _process_series_data(normalized_rows: List[Dict[str, Any]], dry_run: bool = 
                         results["errors"].append(f"Строка {idx}: ошибка обновления серии: {str(e)}")
                         continue
                 else:
-                    # Создание новой серии
                     try:
                         with connection.cursor() as cursor:
                             cursor.execute(
@@ -416,18 +366,13 @@ def _process_series_data(normalized_rows: List[Dict[str, Any]], dry_run: bool = 
     return results
 
 
-def _process_stocks_data(normalized_rows: List[Dict[str, Any]], dry_run: bool = False) -> Dict[str, Any]:
-    """Обработка и сохранение остатков"""
+def _process_stocks_data(normalized_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     results = {
         "processed": 0,
         "created": 0,
         "updated": 0,
         "errors": [],
     }
-    
-    if dry_run:
-        results["processed"] = len(normalized_rows)
-        return results
     
     with transaction.atomic():
         for idx, row in enumerate(normalized_rows, 1):
@@ -460,10 +405,8 @@ def _process_stocks_data(normalized_rows: List[Dict[str, Any]], dry_run: bool = 
                         results["errors"].append(f"Строка {idx}: клиент {client_id} не найден")
                         continue
                 
-                # Создаем или обновляем остаток
                 try:
                     with connection.cursor() as cursor:
-                        # Проверяем существование остатка
                         cursor.execute(
                             """
                             SELECT stocks_id FROM stocks 
@@ -474,7 +417,6 @@ def _process_stocks_data(normalized_rows: List[Dict[str, Any]], dry_run: bool = 
                         existing = cursor.fetchone()
                         
                         if existing:
-                            # Обновление
                             cursor.execute(
                                 """
                                 UPDATE stocks 
@@ -485,7 +427,6 @@ def _process_stocks_data(normalized_rows: List[Dict[str, Any]], dry_run: bool = 
                             )
                             results["updated"] += 1
                         else:
-                            # Создание
                             cursor.execute(
                                 """
                                 INSERT INTO stocks (series_id, client_id, stocks_count, stocks_is_reserved_for_client, stocks_update_at)
@@ -507,18 +448,13 @@ def _process_stocks_data(normalized_rows: List[Dict[str, Any]], dry_run: bool = 
     return results
 
 
-def _process_orders_data(normalized_rows: List[Dict[str, Any]], dry_run: bool = False) -> Dict[str, Any]:
-    """Обработка и сохранение заказов"""
+def _process_orders_data(normalized_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     results = {
         "processed": 0,
         "created": 0,
         "updated": 0,
         "errors": [],
     }
-    
-    if dry_run:
-        results["processed"] = len(normalized_rows)
-        return results
     
     with transaction.atomic():
         for idx, row in enumerate(normalized_rows, 1):
@@ -544,7 +480,6 @@ def _process_orders_data(normalized_rows: List[Dict[str, Any]], dry_run: bool = 
                 status_clipped = _clip(status, length=30)
                 cancel_reason_clipped = _clip(cancel_reason, length=100) if cancel_reason else None
                 
-                # Создаем заказ
                 try:
                     with connection.cursor() as cursor:
                         cursor.execute(
@@ -557,7 +492,6 @@ def _process_orders_data(normalized_rows: List[Dict[str, Any]], dry_run: bool = 
                         )
                         order_id = cursor.fetchone()[0]
                         
-                        # Добавляем элементы заказа
                         for item_idx, item in enumerate(items, 1):
                             try:
                                 product_id = int(item.get("product_id") or item.get("productId"))
@@ -606,77 +540,16 @@ def _process_orders_data(normalized_rows: List[Dict[str, Any]], dry_run: bool = 
     return results
 
 
-# ============================================================================
-# API Views
-# ============================================================================
-
-
 @csrf_exempt
 @require_http_methods(["POST"])
 @require_admin_auth
 def admin_data_lake_upload(request):
-    """
-    Загрузка данных из JSON файла или JSON в теле запроса
+    if "file" not in request.FILES:
+        return JsonResponse({"error": "Файл не предоставлен"}, status=400)
     
-    Поддерживает два способа отправки:
-    1. Файл через multipart/form-data:
-       - file: файл (JSON)
-       - data_type: тип данных (products, series, stocks, orders)
-       - dry_run: если true, только валидация без сохранения (по умолчанию false)
+    uploaded_file = request.FILES["file"]
+    data_type = request.POST.get("data_type", "").lower()
     
-    2. JSON напрямую через application/json:
-       {
-         "data": [...],  // массив данных
-         "data_type": "products",  // тип данных
-         "dry_run": false  // опционально
-       }
-    """
-    content_type = request.content_type or ""
-    file_name = None
-    rows = None
-    
-    # Вариант 1: JSON в теле запроса (application/json)
-    if "application/json" in content_type:
-        try:
-            payload = _parse_json_body(request)
-        except ValueError as e:
-            return JsonResponse({"error": f"Ошибка парсинга JSON: {str(e)}"}, status=400)
-        
-        if "data" not in payload:
-            return JsonResponse({"error": "Поле 'data' обязательно в JSON запросе"}, status=400)
-        
-        data_type = payload.get("data_type", "").lower()
-        dry_run = payload.get("dry_run", False)
-        rows = payload["data"]
-        
-        # Проверяем, что data - это список
-        if not isinstance(rows, list):
-            return JsonResponse({"error": "Поле 'data' должно быть массивом"}, status=400)
-        
-        file_name = "inline_json"
-    
-    # Вариант 2: Файл через multipart/form-data
-    elif "file" in request.FILES:
-        uploaded_file = request.FILES["file"]
-        data_type = request.POST.get("data_type", "").lower()
-        dry_run = request.POST.get("dry_run", "false").lower() in ("true", "1", "yes")
-        file_name = uploaded_file.name
-        
-        # Парсим JSON файл
-        file_content = uploaded_file.read()
-        
-        try:
-            rows = _parse_json_file(file_content)
-        except ValueError as e:
-            return JsonResponse({"error": str(e)}, status=400)
-    
-    else:
-        return JsonResponse(
-            {"error": "Необходимо предоставить либо файл (multipart/form-data), либо JSON в теле запроса (application/json)"},
-            status=400,
-        )
-    
-    # Валидация data_type
     if not data_type:
         return JsonResponse({"error": "Параметр 'data_type' обязателен (products, series, stocks, orders)"}, status=400)
     
@@ -686,23 +559,29 @@ def admin_data_lake_upload(request):
             status=400,
         )
     
-    if not rows:
-        return JsonResponse({"error": "Данные пусты или не содержат записей"}, status=400)
+    file_content = uploaded_file.read()
     
-    # Нормализация данных
+    try:
+        rows = _parse_json_file(file_content)
+    except ValueError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    
+    if not rows:
+        return JsonResponse({"error": "Файл пуст или не содержит данных"}, status=400)
+    
     try:
         if data_type == "products":
             normalized_rows = [_normalize_product_data(row) for row in rows]
-            results = _process_products_data(normalized_rows, dry_run=dry_run)
+            results = _process_products_data(normalized_rows)
         elif data_type == "series":
             normalized_rows = [_normalize_series_data(row) for row in rows]
-            results = _process_series_data(normalized_rows, dry_run=dry_run)
+            results = _process_series_data(normalized_rows)
         elif data_type == "stocks":
             normalized_rows = [_normalize_stock_data(row) for row in rows]
-            results = _process_stocks_data(normalized_rows, dry_run=dry_run)
+            results = _process_stocks_data(normalized_rows)
         elif data_type == "orders":
             normalized_rows = [_normalize_order_data(row) for row in rows]
-            results = _process_orders_data(normalized_rows, dry_run=dry_run)
+            results = _process_orders_data(normalized_rows)
         else:
             return JsonResponse({"error": "Неподдерживаемый тип данных"}, status=400)
     except Exception as e:
@@ -716,13 +595,12 @@ def admin_data_lake_upload(request):
     
     response_data = {
         "data_type": data_type,
-        "file_name": file_name,
+        "file_name": uploaded_file.name,
         "rows_count": len(rows),
-        "dry_run": dry_run,
         "results": results,
     }
     
-    status_code = 200 if not results["errors"] else 207  # 207 Multi-Status если есть ошибки
+    status_code = 200 if not results["errors"] else 207
     
     return JsonResponse(response_data, status=status_code)
 
@@ -731,9 +609,6 @@ def admin_data_lake_upload(request):
 @require_http_methods(["GET"])
 @require_admin_auth
 def admin_data_lake_info(request):
-    """
-    Информация о поддерживаемых форматах и типах данных
-    """
     return JsonResponse(
         {
             "supported_formats": ["JSON"],

@@ -137,12 +137,9 @@ def orders_view(request):
                 order_items_count=quantity,
             )
 
-            # Если заказ из остатков (series_id != null), вычитаем из stocks
             if series is not None:
                 remaining_quantity = float(quantity)
                 
-                # Получаем все записи Stocks для данной серии
-                # Сначала записи для текущего клиента, потом общедоступные (client IS NULL)
                 client_stocks = Stocks.objects.filter(
                     series=series,
                     client=client,
@@ -155,7 +152,6 @@ def orders_view(request):
                     stocks_count__gt=0
                 )
                 
-                # Проверяем, что доступного количества достаточно
                 client_total = client_stocks.aggregate(
                     total=Coalesce(Sum("stocks_count", output_field=FloatField()), 0.0)
                 )["total"] or 0.0
@@ -176,7 +172,6 @@ def orders_view(request):
                         status=400,
                     )
                 
-                # Вычитаем количество из stocks: сначала из записей для текущего клиента, потом из общедоступных
                 stocks_records = list(client_stocks) + list(public_stocks)
                 
                 for stock_record in stocks_records:
@@ -187,7 +182,6 @@ def orders_view(request):
                     if available_in_record <= 0:
                         continue
                     
-                    # Вычитаем либо всё доступное в записи, либо оставшееся количество
                     quantity_to_deduct = min(remaining_quantity, available_in_record)
                     stock_record.stocks_count = available_in_record - quantity_to_deduct
                     stock_record.stocks_update_at = timezone.now().date()
@@ -195,7 +189,7 @@ def orders_view(request):
                     
                     remaining_quantity -= quantity_to_deduct
 
-        from ..models import OrderStatusHistory  # local import to avoid circular
+        from ..models import OrderStatusHistory
 
         OrderStatusHistory.objects.create(
             orders=order,
@@ -252,7 +246,7 @@ def order_detail_view(request, order_id: int):
     order.save(update_fields=update_fields)
 
     if status_updated:
-        from ..models import OrderStatusHistory  # local import to avoid circular
+        from ..models import OrderStatusHistory
 
         OrderStatusHistory.objects.create(
             orders=order,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from django.db import transaction
-from django.db.models import F, Q, Sum
+from django.db.models import F, FloatField, Q, Sum
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
@@ -10,8 +10,6 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from ..models import Cart, CartItem, Orders, OrdersItems, Products, Series, Stocks, Users
-from django.db.models import Sum, Q, FloatField
-from django.db.models.functions import Coalesce
 from .utils import (
     _parse_json_body,
     _serialize_client,
@@ -22,7 +20,6 @@ from .utils import (
 
 
 def _get_or_create_cart(user: Users) -> Cart:
-    """Получить или создать корзину для пользователя."""
     cart, created = Cart.objects.get_or_create(
         user=user,
         defaults={
@@ -31,14 +28,12 @@ def _get_or_create_cart(user: Users) -> Cart:
         },
     )
     if not created:
-        # Обновляем время последнего изменения
         cart.cart_updated_at = timezone.now()
         cart.save(update_fields=["cart_updated_at"])
     return cart
 
 
 def _serialize_cart_item(cart_item: CartItem) -> dict:
-    """Сериализация позиции корзины."""
     result = {
         "id": cart_item.cart_item_id,
         "quantity": cart_item.cart_item_quantity,
@@ -49,7 +44,6 @@ def _serialize_cart_item(cart_item: CartItem) -> dict:
 
 
 def _serialize_cart(cart: Cart, include_items: bool = True) -> dict:
-    """Сериализация корзины."""
     payload = {
         "id": cart.cart_id,
         "user": {
@@ -81,13 +75,11 @@ def _serialize_cart(cart: Cart, include_items: bool = True) -> dict:
             sum(item["quantity"] for item in items)
         )
 
-        # Вычисляем общую стоимость
         total_price = sum(
             item["product"]["price"] * item["quantity"] for item in items
         )
         payload["total_price"] = total_price
     else:
-        # Даже без items можем посчитать количество через агрегацию
         items_count = CartItem.objects.filter(cart=cart).count()
         total_quantity = (
             CartItem.objects.filter(cart=cart).aggregate(
@@ -105,7 +97,6 @@ def _serialize_cart(cart: Cart, include_items: bool = True) -> dict:
 @csrf_exempt
 @require_http_methods(["GET"])
 def cart_view(request):
-    """Получить корзину авторизованного пользователя."""
     user = request.authenticated_user
     cart = _get_or_create_cart(user)
     return JsonResponse(_serialize_cart(cart, include_items=True))
@@ -115,13 +106,6 @@ def cart_view(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def cart_item_add_view(request):
-    """
-    Добавить товар в корзину.
-    
-    Можно добавить:
-    1. Только продукт (без серии) - series_id не указывается
-    2. Продукт с серией - но только если серия есть в stocks
-    """
     user = request.authenticated_user
 
     try:
@@ -130,7 +114,7 @@ def cart_item_add_view(request):
         return JsonResponse({"error": str(exc)}, status=400)
 
     product_id = payload.get("product_id")
-    series_id = payload.get("series_id")  # Опциональное поле
+    series_id = payload.get("series_id")
     quantity = payload.get("quantity", 1)
 
     if not product_id:
@@ -153,18 +137,15 @@ def cart_item_add_view(request):
     product = get_object_or_404(Products, pk=product_id)
     series = None
 
-    # Если series_id указан, проверяем что серия существует и принадлежит продукту
     if series_id is not None:
         series = get_object_or_404(Series, pk=series_id)
 
-        # Проверяем, что серия принадлежит продукту
         if series.product_id != product.product_id:
             return JsonResponse(
                 {"error": f"Series '{series_id}' does not belong to product '{product_id}'."},
                 status=400,
             )
 
-        # Проверяем, что серия есть в stocks и количество > 0
         stocks_queryset = Stocks.objects.filter(series=series)
         stocks_count = stocks_queryset.aggregate(
             total=Coalesce(Sum("stocks_count", output_field=FloatField()), 0.0)
@@ -181,22 +162,17 @@ def cart_item_add_view(request):
 
     cart = _get_or_create_cart(user)
 
-    # Проверяем, есть ли уже такой товар в корзине
-    # Для записей без серии ищем по (cart, product, series=None)
-    # Для записей с серией ищем по (cart, product, series)
     cart_item, created = CartItem.objects.get_or_create(
         cart=cart,
         product=product,
-        series=series,  # Может быть None
+        series=series,
         defaults={"cart_item_quantity": quantity},
     )
 
     if not created:
-        # Если товар уже есть, увеличиваем количество
         cart_item.cart_item_quantity += quantity
         cart_item.save(update_fields=["cart_item_quantity"])
 
-    # Обновляем время изменения корзины
     cart.cart_updated_at = timezone.now()
     cart.save(update_fields=["cart_updated_at"])
 
@@ -207,7 +183,6 @@ def cart_item_add_view(request):
 @csrf_exempt
 @require_http_methods(["PATCH", "DELETE"])
 def cart_item_detail_view(request, cart_item_id: int):
-    """Изменить или удалить позицию в корзине."""
     user = request.authenticated_user
     cart = _get_or_create_cart(user)
 
@@ -219,12 +194,10 @@ def cart_item_detail_view(request, cart_item_id: int):
 
     if request.method == "DELETE":
         cart_item.delete()
-        # Обновляем время изменения корзины
         cart.cart_updated_at = timezone.now()
         cart.save(update_fields=["cart_updated_at"])
         return JsonResponse({"message": "Cart item deleted successfully."}, status=200)
 
-    # PATCH - изменение количества
     try:
         payload = _parse_json_body(request)
     except ValueError as exc:
@@ -245,7 +218,6 @@ def cart_item_detail_view(request, cart_item_id: int):
     cart_item.cart_item_quantity = quantity
     cart_item.save(update_fields=["cart_item_quantity"])
 
-    # Обновляем время изменения корзины
     cart.cart_updated_at = timezone.now()
     cart.save(update_fields=["cart_updated_at"])
 
@@ -256,7 +228,6 @@ def cart_item_detail_view(request, cart_item_id: int):
 @csrf_exempt
 @require_http_methods(["POST"])
 def cart_checkout_view(request):
-    """Оформить заказ из корзины."""
     user = request.authenticated_user
     client = user.client
 
@@ -267,7 +238,6 @@ def cart_checkout_view(request):
 
     cart = _get_or_create_cart(user)
 
-    # Получаем все позиции корзины
     cart_items = CartItem.objects.filter(cart=cart).select_related(
         "product",
         "series",
@@ -276,7 +246,6 @@ def cart_checkout_view(request):
     if not cart_items.exists():
         return JsonResponse({"error": "Cart is empty. Cannot create order."}, status=400)
 
-    # Параметры заказа
     status_value = str(payload.get("status", "pending")).strip()[:30] or "pending"
     note_value = payload.get("status_note")
 
@@ -322,7 +291,6 @@ def cart_checkout_view(request):
     cancel_reason = str(payload.get("cancel_reason", ""))[:100] or None
 
     with transaction.atomic():
-        # Создаем заказ
         order = Orders.objects.create(
             client=client,
             orders_status=status_value,
@@ -332,7 +300,6 @@ def cart_checkout_view(request):
             orders_cancel_reason=cancel_reason,
         )
 
-        # Создаем позиции заказа из корзины
         for cart_item in cart_items:
             order_item = OrdersItems.objects.create(
                 orders=order,
@@ -341,12 +308,9 @@ def cart_checkout_view(request):
                 order_items_count=cart_item.cart_item_quantity,
             )
 
-            # Если заказ из остатков (series_id != null), вычитаем из stocks
             if cart_item.series is not None:
                 remaining_quantity = float(cart_item.cart_item_quantity)
                 
-                # Получаем все записи Stocks для данной серии
-                # Сначала записи для текущего клиента, потом общедоступные (client IS NULL)
                 client_stocks = Stocks.objects.filter(
                     series=cart_item.series,
                     client=client,
@@ -359,7 +323,6 @@ def cart_checkout_view(request):
                     stocks_count__gt=0
                 )
                 
-                # Проверяем, что доступного количества достаточно
                 client_total = client_stocks.aggregate(
                     total=Coalesce(Sum("stocks_count", output_field=FloatField()), 0.0)
                 )["total"] or 0.0
@@ -380,7 +343,6 @@ def cart_checkout_view(request):
                         status=400,
                     )
                 
-                # Вычитаем количество из stocks: сначала из записей для текущего клиента, потом из общедоступных
                 stocks_records = list(client_stocks) + list(public_stocks)
                 
                 for stock_record in stocks_records:
@@ -391,7 +353,6 @@ def cart_checkout_view(request):
                     if available_in_record <= 0:
                         continue
                     
-                    # Вычитаем либо всё доступное в записи, либо оставшееся количество
                     quantity_to_deduct = min(remaining_quantity, available_in_record)
                     stock_record.stocks_count = available_in_record - quantity_to_deduct
                     stock_record.stocks_update_at = timezone.now().date()
@@ -399,7 +360,6 @@ def cart_checkout_view(request):
                     
                     remaining_quantity -= quantity_to_deduct
 
-        # Создаем запись в истории статусов
         from ..models import OrderStatusHistory
 
         OrderStatusHistory.objects.create(
@@ -410,14 +370,11 @@ def cart_checkout_view(request):
             order_status_history_note=str(note_value)[:30] if note_value else "Created from cart",
         )
 
-        # Очищаем корзину (удаляем все позиции)
         cart_items.delete()
 
-        # Обновляем время изменения корзины
         cart.cart_updated_at = timezone.now()
         cart.save(update_fields=["cart_updated_at"])
 
-    # Получаем созданный заказ со всеми данными
     from .utils import _serialize_order
 
     order = Orders.objects.select_related("client").prefetch_related(
@@ -436,13 +393,11 @@ def cart_checkout_view(request):
 @csrf_exempt
 @require_http_methods(["DELETE"])
 def cart_clear_view(request):
-    """Очистить корзину (удалить все позиции)."""
     user = request.authenticated_user
     cart = _get_or_create_cart(user)
 
     CartItem.objects.filter(cart=cart).delete()
 
-    # Обновляем время изменения корзины
     cart.cart_updated_at = timezone.now()
     cart.save(update_fields=["cart_updated_at"])
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import F, Q, Sum
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
@@ -334,12 +334,70 @@ def cart_checkout_view(request):
 
         # Создаем позиции заказа из корзины
         for cart_item in cart_items:
-            OrdersItems.objects.create(
+            order_item = OrdersItems.objects.create(
                 orders=order,
                 product=cart_item.product,
                 series=cart_item.series,
                 order_items_count=cart_item.cart_item_quantity,
             )
+
+            # Если заказ из остатков (series_id != null), вычитаем из stocks
+            if cart_item.series is not None:
+                remaining_quantity = float(cart_item.cart_item_quantity)
+                
+                # Получаем все записи Stocks для данной серии
+                # Сначала записи для текущего клиента, потом общедоступные (client IS NULL)
+                client_stocks = Stocks.objects.filter(
+                    series=cart_item.series,
+                    client=client,
+                    stocks_count__gt=0
+                )
+                
+                public_stocks = Stocks.objects.filter(
+                    series=cart_item.series,
+                    client__isnull=True,
+                    stocks_count__gt=0
+                )
+                
+                # Проверяем, что доступного количества достаточно
+                client_total = client_stocks.aggregate(
+                    total=Coalesce(Sum("stocks_count", output_field=FloatField()), 0.0)
+                )["total"] or 0.0
+                
+                public_total = public_stocks.aggregate(
+                    total=Coalesce(Sum("stocks_count", output_field=FloatField()), 0.0)
+                )["total"] or 0.0
+                
+                total_available = client_total + public_total
+                
+                if total_available < remaining_quantity:
+                    transaction.set_rollback(True)
+                    return JsonResponse(
+                        {
+                            "error": f"Insufficient stock for series '{cart_item.series.series_id}'. "
+                                    f"Requested: {remaining_quantity}, Available: {total_available}"
+                        },
+                        status=400,
+                    )
+                
+                # Вычитаем количество из stocks: сначала из записей для текущего клиента, потом из общедоступных
+                stocks_records = list(client_stocks) + list(public_stocks)
+                
+                for stock_record in stocks_records:
+                    if remaining_quantity <= 0:
+                        break
+                    
+                    available_in_record = float(stock_record.stocks_count)
+                    if available_in_record <= 0:
+                        continue
+                    
+                    # Вычитаем либо всё доступное в записи, либо оставшееся количество
+                    quantity_to_deduct = min(remaining_quantity, available_in_record)
+                    stock_record.stocks_count = available_in_record - quantity_to_deduct
+                    stock_record.stocks_update_at = timezone.now().date()
+                    stock_record.save(update_fields=["stocks_count", "stocks_update_at"])
+                    
+                    remaining_quantity -= quantity_to_deduct
 
         # Создаем запись в истории статусов
         from ..models import OrderStatusHistory

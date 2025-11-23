@@ -52,5 +52,8 @@ urlpatterns = [
     path("admin/analytics/top-products/", views.admin_analytics_top_products, name="admin-analytics-top-products"),
     path("admin/analytics/top-series/", views.admin_analytics_top_series, name="admin-analytics-top-series"),
     path("admin/analytics/top-coating-types/", views.admin_analytics_top_coating_types, name="admin-analytics-top-coating-types"),
+    # Admin Data Lake endpoints
+    path("admin/data-lake/upload/", views.admin_data_lake_upload, name="admin-data-lake-upload"),
+    path("admin/data-lake/info/", views.admin_data_lake_info, name="admin-data-lake-info"),
 ]
 

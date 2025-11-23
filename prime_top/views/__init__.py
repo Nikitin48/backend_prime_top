@@ -48,6 +48,10 @@ from .admin_analytics import (
     admin_analytics_top_products,
     admin_analytics_top_series,
 )
+from .data_lake import (
+    admin_data_lake_info,
+    admin_data_lake_upload,
+)
 
 __all__ = [
     "register_view",
@@ -96,5 +100,7 @@ __all__ = [
     "admin_analytics_top_products",
     "admin_analytics_top_series",
     "admin_analytics_top_coating_types",
+    "admin_data_lake_upload",
+    "admin_data_lake_info",
 ]
 

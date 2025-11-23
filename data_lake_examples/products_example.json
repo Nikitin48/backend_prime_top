@@ -1,0 +1,17 @@
+[
+  {
+    "product_name": "Краска белая RAL 9010 (ТЕСТОВАЯ)",
+    "price": 1500,
+    "color_code": 9010,
+    "coating_type_name": "Акриловая краска",
+    "coating_type_nomenclature": "AKR-001"
+  },
+  {
+    "product_name": "Краска синяя RAL 5015 (ТЕСТОВАЯ)",
+    "price": 1800,
+    "color_code": 5015,
+    "coating_type_name": "Акриловая краска",
+    "coating_type_nomenclature": "AKR-001"
+  }
+]
+

@@ -1,0 +1,14 @@
+[
+  {
+    "series_id": 207,
+    "quantity": 150.5,
+    "is_reserved": false
+  },
+  {
+    "series_id": 208,
+    "quantity": 50.0,
+    "client_id": 11,
+    "is_reserved": true
+  }
+]
+

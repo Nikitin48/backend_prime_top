@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from django.db.models import Count, F, Q, Sum
+from django.db.models import Count, F, FloatField, Q, Sum
 from django.db.models.functions import Coalesce
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404
@@ -61,6 +61,33 @@ def stocks_view(request):
         except ValueError:
             stocks_qs = stocks_qs.filter(series__series_name__icontains=series_filter)
 
+    # Фильтр по series_id (точное совпадение)
+    series_id_param = request.GET.get("series_id")
+    if series_id_param:
+        try:
+            series_id_value = int(series_id_param)
+            stocks_qs = stocks_qs.filter(series__series_id=series_id_value)
+        except ValueError:
+            raise Http404("Query parameter 'series_id' must be an integer.")
+
+    # Прямые фильтры по полям анализов
+    analysis_direct_fields = [
+        "analyses_blesk_pri_60_grad",
+        "analyses_uslovnaya_vyazkost",
+        "analyses_delta_e",
+        "analyses_delta_l",
+        "analyses_delta_a",
+        "analyses_delta_b",
+    ]
+    for field in analysis_direct_fields:
+        field_value = request.GET.get(field)
+        if field_value is not None:
+            try:
+                float_value = float(field_value)
+                stocks_qs = stocks_qs.filter(**{f"series__analyses__{field}": float_value})
+            except (TypeError, ValueError):
+                raise Http404(f"Query parameter '{field}' must be numeric.")
+
     analysis_filters = _analysis_range_filters_from_request(request, prefix="series__analyses__")
     if analysis_filters:
         stocks_qs = stocks_qs.filter(**analysis_filters)
@@ -70,6 +97,44 @@ def stocks_view(request):
         "series__product__coating_types__coating_type_nomenclatura",
         "series__series_id",
     )
+
+    # Получаем общее количество записей до применения пагинации
+    total_count = stocks_qs.count()
+
+    # Выполняем агрегацию на полном queryset (до пагинации)
+    aggregation = (
+        stocks_qs.values(
+            "series__product__product_name",
+            "series__product__coating_types__coating_type_nomenclatura",
+            "series__product__coating_types__coating_type_name",
+        )
+        .annotate(
+            total_quantity=Coalesce(Sum("stocks_count"), 0, output_field=FloatField()),
+            series_count=Count("series", distinct=True),
+        )
+        .order_by("series__product__coating_types__coating_type_nomenclatura", "series__product__product_name")
+    )
+
+    # Применяем пагинацию
+    offset = request.GET.get("offset")
+    if offset:
+        try:
+            offset_value = int(offset)
+            if offset_value < 0:
+                raise Http404("Query parameter 'offset' must be a non-negative integer.")
+            stocks_qs = stocks_qs[offset_value:]
+        except ValueError:
+            raise Http404("Query parameter 'offset' must be an integer.")
+
+    limit = request.GET.get("limit")
+    if limit:
+        try:
+            limit_value = int(limit)
+            if limit_value <= 0:
+                raise Http404("Query parameter 'limit' must be a positive integer.")
+            stocks_qs = stocks_qs[:limit_value]
+        except ValueError:
+            raise Http404("Query parameter 'limit' must be an integer.")
 
     series_entries: List[Dict[str, object]] = []
     for stock in stocks_qs:
@@ -120,19 +185,6 @@ def stocks_view(request):
             }
         )
 
-    aggregation = (
-        stocks_qs.values(
-            "series__product__product_name",
-            "series__product__coating_types__coating_type_nomenclatura",
-            "series__product__coating_types__coating_type_name",
-        )
-        .annotate(
-            total_quantity=Coalesce(Sum("stocks_count"), 0),
-            series_count=Count("series", distinct=True),
-        )
-        .order_by("series__product__coating_types__coating_type_nomenclatura", "series__product__product_name")
-    )
-
     summary = [
         {
             "product_name": entry["series__product__product_name"],
@@ -152,6 +204,8 @@ def stocks_view(request):
         if client
         else None,
         "summary_by_nomenclature": summary,
+        "count": len(series_entries),
+        "total_count": total_count,
         "series": series_entries,
     }
     return JsonResponse(response)

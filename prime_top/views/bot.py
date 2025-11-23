@@ -32,42 +32,46 @@ def bot_link_view(request):
     except (TypeError, ValueError):
         return JsonResponse({"error": "Field 'chat_id' must be an integer."}, status=400)
 
-    email = str(email_raw).strip().lower()
-    user = Users.objects.select_related("client").filter(user_email__iexact=email).first()
-    if not user:
-        return JsonResponse({"error": "Invalid credentials."}, status=401)
+    try:
+        email = str(email_raw).strip().lower()
+        user = Users.objects.select_related("client").filter(user_email__iexact=email).first()
+        if not user:
+            return JsonResponse({"error": "Invalid credentials."}, status=401)
 
-    if not _check_user_password(str(password), user.user_password_hash):
-        return JsonResponse({"error": "Invalid credentials."}, status=401)
+        if not _check_user_password(str(password), user.user_password_hash):
+            return JsonResponse({"error": "Invalid credentials."}, status=401)
 
-    if not user.user_is_active:
-        return JsonResponse({"error": "User is inactive."}, status=403)
+        if not user.user_is_active:
+            return JsonResponse({"error": "User is inactive."}, status=403)
 
-    if getattr(user, "user_is_admin", False):
-        return JsonResponse({"error": "Admin accounts cannot link to Telegram."}, status=403)
+        if getattr(user, "user_is_admin", False):
+            return JsonResponse({"error": "Admin accounts cannot link to Telegram."}, status=403)
 
-    conflict = TelegramLink.objects.filter(tg_chat_id=chat_id_int).exclude(user=user).first()
-    if conflict:
-        return JsonResponse({"error": "This chat is already linked to another user."}, status=409)
+        conflict = TelegramLink.objects.filter(tg_chat_id=chat_id_int).exclude(user=user).first()
+        if conflict:
+            return JsonResponse({"error": "This chat is already linked to another user."}, status=409)
 
-    link, created = TelegramLink.objects.update_or_create(
-        user=user,
-        defaults={
-            "tg_chat_id": chat_id_int,
-            "tg_username": str(username).strip() if username else None,
-            "is_active": True,
-        },
-    )
+        # lookup by user to avoid unique tg_chat_id conflicts on update
+        link, created = TelegramLink.objects.update_or_create(
+            user=user,
+            defaults={
+                "tg_chat_id": chat_id_int,
+                "tg_username": str(username).strip() if username else None,
+                "is_active": True,
+            },
+        )
 
-    return JsonResponse(
-        {
-            "linked": True,
-            "user_id": user.user_id,
-            "chat_id": link.tg_chat_id,
-            "created": created,
-        },
-        status=201 if created else 200,
-    )
+        return JsonResponse(
+            {
+                "linked": True,
+                "user_id": user.user_id,
+                "chat_id": link.tg_chat_id,
+                "created": created,
+            },
+            status=201 if created else 200,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return JsonResponse({"error": "Internal error", "detail": str(exc)}, status=500)
 
 
 @csrf_exempt
@@ -127,15 +131,33 @@ def bot_orders_view(request):
     if not link:
         return JsonResponse({"error": "Active chat link not found."}, status=404)
 
-    status_param = request.GET.get("status")
+    status_param = (request.GET.get("status") or "").strip().lower()
 
     try:
         orders_qs = Orders.objects.select_related("client").filter(client=link.user.client)
 
         if status_param:
-            orders_qs = orders_qs.filter(orders_status__iexact=status_param)
+            if status_param == "current":
+                # исключаем доставленные и отмененные (учитываем возможные русские варианты и пробелы)
+                orders_qs = orders_qs.exclude(
+                    orders_status__iregex=r'^\s*(delivered|доставлен|доставлено)\s*$'
+                ).exclude(
+                    orders_status__iregex=r'^\s*(cancelled|canceled|отменен|отменён|отменено)\s*$'
+                )
+            elif status_param == "completed":
+                orders_qs = orders_qs.filter(orders_status__iregex=r'^\s*(delivered|доставлен|доставлено)\s*$')
+            elif status_param in ("canceled", "cancelled"):
+                orders_qs = orders_qs.filter(
+                    orders_status__iregex=r'^\s*(cancelled|canceled|отменен|отменён|отменено)\s*$'
+                )
+            elif status_param == "all":
+                pass
+            else:
+                statuses = [s.strip() for s in status_param.split(",") if s.strip()]
+                if statuses:
+                    orders_qs = orders_qs.filter(orders_status__in=statuses)
 
-        orders_qs = orders_qs.order_by("-orders_created_at")[:10]
+        orders_qs = orders_qs.order_by("-orders_created_at")[:20]
 
         orders_payload = [
             {

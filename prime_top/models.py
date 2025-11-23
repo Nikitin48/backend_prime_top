@@ -178,3 +178,20 @@ class Users(models.Model):
     class Meta:
         managed = False
         db_table = 'users'
+
+
+class TelegramLink(models.Model):
+    """Связка Telegram-чата с пользователем."""
+
+    id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(Users, models.CASCADE, related_name="telegram_links")
+    tg_chat_id = models.BigIntegerField(unique=True)
+    tg_username = models.CharField(max_length=255, blank=True, null=True)
+    linked_at = models.DateTimeField(auto_now_add=True)
+    last_activity = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+    last_status_sent_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = True
+        db_table = 'telegram_links'

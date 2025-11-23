@@ -21,6 +21,7 @@ from ..models import (
     Stocks,
     Users,
 )
+from ..services.telegram_notifier import notify_order_status_change
 from .utils import (
     _clip,
     _parse_iso_date,
@@ -1006,13 +1007,16 @@ def admin_orders_detail(request, order_id: int):
 
     status_updated = False
     status_from = order.orders_status
+    status_from_norm = status_from.lower() if status_from else None
+    status_note = _clip(payload.get("status_note"), length=30) if "status_note" in payload else None
 
     update_fields = []
     update_values = []
 
     if "status" in payload and payload["status"] is not None:
         new_status = _clip(str(payload["status"]).strip(), length=30)
-        if new_status and new_status != order.orders_status:
+        new_status_norm = new_status.lower() if new_status else None
+        if new_status and new_status_norm != status_from_norm:
             update_fields.append("orders_status = %s")
             update_values.append(new_status)
             status_updated = True
@@ -1061,5 +1065,14 @@ def admin_orders_detail(request, order_id: int):
                 )
 
     order.refresh_from_db()
+
+    if status_updated:
+        notify_order_status_change(
+            order,
+            from_status=status_from,
+            to_status=order.orders_status,
+            note=status_note,
+        )
+
     return JsonResponse(_serialize_order(order))
 

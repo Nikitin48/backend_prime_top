@@ -175,6 +175,10 @@ async def process_password(message: types.Message, state: FSMContext, session: a
         await state.clear()
         return
 
+    detail = resp.get("detail")
+    err = resp.get("error", "ошибка")
+    msg = err if not detail else f"{err}: {detail}"
+
     if status == 401:
         await message.answer(
             "Неверный e-mail или пароль.\n"
@@ -186,7 +190,7 @@ async def process_password(message: types.Message, state: FSMContext, session: a
     elif status == 409:
         await message.answer("Этот чат уже привязан к другому аккаунту. Используйте /unlink или другой чат.", reply_markup=guest_menu())
     else:
-        await message.answer(f"Не удалось привязать: {resp.get('error', 'ошибка')}", reply_markup=guest_menu())
+        await message.answer(f"Не удалось привязать: {msg}", reply_markup=guest_menu())
     await state.clear()
 
 
@@ -208,8 +212,10 @@ async def cmd_orders(message: types.Message, state: FSMContext, session: aiohttp
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Текущие", callback_data="status:pending")],
-            [InlineKeyboardButton(text="Завершенные", callback_data="status:delivered")],
+            [InlineKeyboardButton(text="Все заказы", callback_data="status:all")],
+            [InlineKeyboardButton(text="Текущие", callback_data="status:current")],
+            [InlineKeyboardButton(text="Завершенные", callback_data="status:completed")],
+            [InlineKeyboardButton(text="Отмененные", callback_data="status:cancelled")],
         ]
     )
     await message.answer("Выберите категорию заказов:", reply_markup=kb)
@@ -258,11 +264,11 @@ async def cmd_profile(message: types.Message, state: FSMContext, session: aiohtt
 
 
 async def cmd_orders_current(message: types.Message, state: FSMContext, session: aiohttp.ClientSession):
-    await send_orders_with_status(message, session, status_value="pending", title="Текущие заказы")
+    await send_orders_with_status(message, session, status_value="current", title="Текущие заказы")
 
 
 async def cmd_orders_completed(message: types.Message, state: FSMContext, session: aiohttp.ClientSession):
-    await send_orders_with_status(message, session, status_value="delivered", title="Завершенные заказы")
+    await send_orders_with_status(message, session, status_value="completed", title="Завершенные заказы")
 
 
 async def send_orders_with_status(message: types.Message, session: aiohttp.ClientSession, status_value: Optional[str], title: str):
@@ -384,6 +390,9 @@ def register_handlers(dp: Dispatcher, session: aiohttp.ClientSession):
     async def orders_completed_handler(message: types.Message, state: FSMContext):
         await cmd_orders_completed(message, state, session)
 
+    async def orders_cancelled_handler(message: types.Message, state: FSMContext):
+        await send_orders_with_status(message, session, status_value="cancelled", title="Отмененные заказы")
+
     async def cancel_handler(message: types.Message, state: FSMContext):
         await cmd_cancel(message, state)
 
@@ -394,7 +403,14 @@ def register_handlers(dp: Dispatcher, session: aiohttp.ClientSession):
         data = callback.data or ""
         if data.startswith("status:"):
             status_value = data.split(":", 1)[1]
-            title = "Текущие заказы" if status_value == "pending" else "Завершенные заказы"
+            if status_value == "current":
+                title = "Текущие заказы"
+            elif status_value == "completed":
+                title = "Завершенные заказы"
+            elif status_value in ("cancelled", "canceled"):
+                title = "Отмененные заказы"
+            else:
+                title = "Все заказы"
             linked = await check_linked(session, callback.message.chat.id)
             if not linked:
                 await callback.answer("Сначала привяжите аккаунт через /link", show_alert=True)
@@ -421,6 +437,7 @@ def register_handlers(dp: Dispatcher, session: aiohttp.ClientSession):
     dp.message.register(orders_handler, Command("orders"))
     dp.message.register(orders_current_handler, Command("present"))
     dp.message.register(orders_completed_handler, Command("completed"))
+    dp.message.register(orders_cancelled_handler, Command("cancelled"))
     dp.message.register(cancel_handler, Command("cancel"))
     dp.message.register(reset_handler, Command("reset"))
     dp.callback_query.register(status_callback_handler)

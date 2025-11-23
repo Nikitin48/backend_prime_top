@@ -48,6 +48,13 @@ from .admin_analytics import (
     admin_analytics_top_products,
     admin_analytics_top_series,
 )
+from .bot import (
+    bot_link_view,
+    bot_unlink_view,
+    bot_orders_view,
+    bot_order_detail_view,
+    bot_profile_view,
+)
 
 __all__ = [
     "register_view",
@@ -96,5 +103,10 @@ __all__ = [
     "admin_analytics_top_products",
     "admin_analytics_top_series",
     "admin_analytics_top_coating_types",
+    "bot_link_view",
+    "bot_unlink_view",
+    "bot_orders_view",
+    "bot_order_detail_view",
+    "bot_profile_view",
 ]
 

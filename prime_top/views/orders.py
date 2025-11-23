@@ -222,10 +222,12 @@ def order_detail_view(request, order_id: int):
 
     status_updated = False
     status_from = order.orders_status
+    status_from_norm = status_from.lower() if status_from else None
 
     if "status" in payload and payload["status"] is not None:
         new_status = _clip(str(payload["status"]).strip(), length=30)
-        if new_status and new_status != order.orders_status:
+        new_status_norm = new_status.lower() if new_status else None
+        if new_status and new_status_norm != status_from_norm:
             order.orders_status = new_status
             status_updated = True
 
